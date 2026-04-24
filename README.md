@@ -62,3 +62,16 @@ Example: `http://192.168.1.42:5173`
 4. Deploy.
 
 Vite uses the default production output folder `dist`, which works with Vercel defaults.
+
+## PWA (Installable App)
+
+PageOne is configured as a basic PWA using `vite-plugin-pwa`.
+
+### Install On iPad/iPhone
+
+1. Open PageOne in Safari.
+2. Tap the Share button.
+3. Tap "Add to Home Screen".
+4. Confirm the name and tap "Add".
+
+When opened from the Home Screen, PageOne launches in standalone mode.

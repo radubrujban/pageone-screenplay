@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#f4f4f5" />
+  <rect x="64" y="52" width="384" height="406" rx="34" fill="#ffffff" stroke="#d4d4d8" stroke-width="4" />
+  <rect x="118" y="136" width="276" height="10" rx="5" fill="#d4d4d8" />
+  <rect x="118" y="172" width="276" height="10" rx="5" fill="#e4e4e7" />
+  <rect x="118" y="208" width="220" height="10" rx="5" fill="#e4e4e7" />
+  <text
+    x="256"
+    y="344"
+    text-anchor="middle"
+    font-family="Courier New, Courier, monospace"
+    font-size="116"
+    font-weight="700"
+    fill="#18181b"
+  >
+    P1
+  </text>
+</svg>
