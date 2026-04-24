@@ -4,10 +4,12 @@ import ScriptPage from "./pages/ScriptPage";
 import LoginPage from "./pages/LoginPage";
 import HomeRedirect from "./pages/HomeRedirect";
 import AuthGuard from "./components/AuthGuard";
+import AuthSessionSync from "./components/AuthSessionSync";
 
 export default function App() {
   return (
     <BrowserRouter>
+      <AuthSessionSync />
       <Routes>
         <Route path="/" element={<HomeRedirect />} />
         <Route path="/login" element={<LoginPage />} />
