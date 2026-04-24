@@ -65,7 +65,7 @@ Vite uses the default production output folder `dist`, which works with Vercel d
 
 ## PWA (Installable App)
 
-PageOne is configured as a basic PWA using `vite-plugin-pwa`.
+PageOne uses a manual web app manifest setup (`public/manifest.webmanifest`) for basic installability.
 
 ### Install On iPad/iPhone
 
