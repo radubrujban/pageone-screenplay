@@ -22,7 +22,7 @@ export default function AuthGuard({
     }
 
     checkUser();
-  }, [navigate]);
+  }, []);
 
   if (loading) {
     return (
