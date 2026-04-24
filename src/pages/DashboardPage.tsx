@@ -153,12 +153,12 @@ export default function DashboardPage() {
   return (
     <AppLayout showSaveStatus>
       <div className="mx-auto max-w-6xl">
-        <div className="mb-10 flex flex-col gap-5 border-b border-zinc-300 pb-8 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mb-8 flex flex-col gap-5 border-b border-zinc-300 pb-6 sm:mb-10 sm:pb-8 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="mb-2 text-xs font-bold uppercase tracking-[0.24em] text-zinc-500">
               Script Library
             </p>
-            <h1 className="text-3xl font-bold tracking-tight">Your Scripts</h1>
+            <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Your Scripts</h1>
             <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-600">
               Open a draft, review recent work, or start a new screenplay.
             </p>
@@ -166,7 +166,7 @@ export default function DashboardPage() {
 
           <button
             onClick={createNewScript}
-            className="rounded bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-500"
+            className="w-full rounded bg-blue-600 px-5 py-3 text-sm font-bold text-white transition hover:bg-blue-500 sm:w-auto"
           >
             + New Script
           </button>
@@ -220,7 +220,7 @@ export default function DashboardPage() {
                       <Stat label="Words" value={stats.words} />
                     </div>
 
-                    <div className="mt-4 flex items-center justify-between">
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                       <button
                         onClick={() => navigate(`/script/${script.id}`)}
                         className="rounded border border-zinc-300 px-3 py-2 text-xs font-bold text-zinc-800 transition hover:bg-zinc-100"
@@ -252,8 +252,8 @@ export default function DashboardPage() {
       </div>
 
       {renamingScript && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-6">
-          <div className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-5 text-zinc-950 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 sm:px-6">
+          <div className="w-full max-w-md rounded-lg border border-zinc-200 bg-white p-4 text-zinc-950 shadow-2xl sm:p-5">
             <h2 className="text-lg font-bold">Rename script</h2>
             <p className="mt-1 text-sm text-zinc-600">
               Give this draft a clear working title.

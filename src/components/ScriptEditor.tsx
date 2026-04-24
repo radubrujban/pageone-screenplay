@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import {
@@ -768,7 +768,7 @@ export default function ScriptEditor() {
       >
       <header className="sticky top-14 z-30 border-b border-zinc-300 bg-zinc-50 font-sans shadow-sm">
         <div
-          className="flex h-9 items-center gap-5 overflow-x-auto border-b border-zinc-200 px-4 text-xs font-sans"
+          className="flex min-h-10 items-center gap-4 overflow-x-auto border-b border-zinc-200 px-3 text-xs font-sans sm:px-4"
           onClick={(e) => e.stopPropagation()}
         >
           <span className="shrink-0 font-bold tracking-wide">Script Studio</span>
@@ -872,8 +872,8 @@ export default function ScriptEditor() {
           )}
         </div>
 
-        <div className="flex min-h-14 items-center justify-between gap-4 overflow-x-auto bg-white px-4 py-2 font-sans">
-          <div className="flex min-w-max items-center gap-2">
+        <div className="flex min-h-14 flex-wrap items-start gap-2 overflow-x-auto bg-white px-3 py-2 font-sans sm:items-center sm:justify-between sm:gap-4 sm:px-4">
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:min-w-max sm:flex-nowrap">
             <div className="flex items-center gap-2 rounded border border-zinc-200 bg-zinc-50 px-2 py-1 shadow-sm">
               <button onClick={() => setShowTitlePage(true)} className="rounded px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-white hover:text-zinc-950">
                 Title Page
@@ -939,7 +939,7 @@ export default function ScriptEditor() {
             </div>
           </div>
 
-          <div className="flex min-w-max items-center gap-4 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 shadow-sm">
+          <div className="flex w-full flex-wrap items-center gap-2 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 shadow-sm sm:w-auto sm:min-w-max sm:flex-nowrap sm:gap-4">
             <span className="text-xs text-zinc-500">
               {stats.words} words · {stats.scenes} scenes · ~{stats.estimatedPages} pages
             </span>
@@ -948,14 +948,19 @@ export default function ScriptEditor() {
               Zoom {Math.round(pageScale * 100)}%
             </span>
 
-            <SaveStatus />
+            <SaveStatus className="hidden sm:inline" />
           </div>
         </div>
       </header>
 
-      <div className="grid font-sans" style={{ gridTemplateColumns: gridColumns }}>
+      <div
+        className="grid grid-cols-1 font-sans lg:[grid-template-columns:var(--editor-grid-cols)]"
+        style={{ "--editor-grid-cols": gridColumns } as CSSProperties}
+      >
         {showNavigator && !focusMode && (
-          <aside className="sticky top-[148px] h-[calc(100vh-148px)] overflow-y-auto border-r border-zinc-200 bg-zinc-50 p-4 font-sans shadow-inner">
+          <aside
+            className="hidden overflow-y-auto border-r border-zinc-200 bg-zinc-50 p-4 font-sans shadow-inner lg:sticky lg:top-[148px] lg:block lg:h-[calc(100vh-148px)]"
+          >
             <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Navigator</h2>
             <p className="mt-1 text-xs text-zinc-500">Scenes, notes & locks</p>
 
@@ -979,21 +984,26 @@ export default function ScriptEditor() {
           </aside>
         )}
 
-        <main className="min-h-screen overflow-x-auto overflow-y-auto px-8 py-8 font-sans">
-          <div className="mx-auto mb-4 flex items-center justify-between" style={{ width: `${format.pageWidth * pageScale}in` }}>
+        <main className="min-h-[calc(100vh-148px)] overflow-x-auto overflow-y-auto px-3 py-4 font-sans sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <div className="mx-auto mb-4 flex min-w-max items-center justify-between gap-3" style={{ width: `${format.pageWidth * pageScale}in` }}>
             <input
               value={title}
               onChange={(e) => updateTitle(e.target.value)}
-              className="w-full bg-transparent text-lg font-bold outline-none"
+              className="min-w-0 w-full bg-transparent text-lg font-bold outline-none"
               placeholder="Untitled Script"
             />
 
-            <span className="text-xs text-zinc-500">
+            <span className="shrink-0 text-xs text-zinc-500">
               {format.pageWidth}" × {format.pageHeight}"
             </span>
           </div>
 
-          <div style={{ transform: `scale(${pageScale})`, transformOrigin: "top center" }}>
+          <div
+            style={{
+              transform: `scale(${pageScale})`,
+              transformOrigin: "top center",
+            }}
+          >
             <div
               className="mx-auto rounded-sm bg-white text-black shadow-xl"
               style={{
@@ -1118,7 +1128,9 @@ export default function ScriptEditor() {
         </main>
 
         {showRightPanel && !focusMode && (
-          <aside className="sticky top-[148px] h-[calc(100vh-148px)] overflow-y-auto border-l border-zinc-200 bg-zinc-50 p-4 font-sans shadow-inner">
+          <aside
+            className="hidden overflow-y-auto border-l border-zinc-200 bg-zinc-50 p-4 font-sans shadow-inner lg:sticky lg:top-[148px] lg:block lg:h-[calc(100vh-148px)]"
+          >
             <div className="mb-4 grid grid-cols-2 gap-2 rounded border border-zinc-200 bg-white p-1 shadow-sm">
               <PanelButton label="Stats" active={rightPanelMode === "stats"} onClick={() => setRightPanelMode("stats")} />
               <PanelButton label="Feedback" active={rightPanelMode === "feedback"} onClick={() => setRightPanelMode("feedback")} />
@@ -1228,7 +1240,7 @@ export default function ScriptEditor() {
 
       {showTitlePage && (
         <LargeModal title="Title Page" onClose={() => setShowTitlePage(false)}>
-          <div className="grid grid-cols-[1fr_330px] gap-5">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_330px]">
             <div>
               <TextField label="Title" value={resolvedTitlePage.title} onChange={updateTitle} />
               <TextField label="Written By" value={titlePage.writtenBy} onChange={(value) => setTitlePage({ ...titlePage, writtenBy: value })} />
@@ -1241,7 +1253,7 @@ export default function ScriptEditor() {
               </button>
             </div>
 
-            <div className="h-[430px] rounded border border-zinc-300 bg-white p-8 text-center shadow-inner" style={{ fontFamily: '"Courier Prime", Courier, monospace' }}>
+            <div className="h-[340px] rounded border border-zinc-300 bg-white p-6 text-center shadow-inner sm:h-[430px] sm:p-8" style={{ fontFamily: '"Courier Prime", Courier, monospace' }}>
               <div className="mt-20 text-lg font-bold uppercase">
                 {resolvedTitlePage.title}
               </div>
@@ -1257,7 +1269,7 @@ export default function ScriptEditor() {
 
       {showFormatSettings && (
         <Modal title="Format Settings" onClose={() => setShowFormatSettings(false)}>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <NumberField label="Page Width" value={format.pageWidth} onChange={(value) => setFormat({ ...format, pageWidth: value })} />
             <NumberField label="Page Height" value={format.pageHeight} onChange={(value) => setFormat({ ...format, pageHeight: value })} />
             <NumberField label="Top Margin" value={format.topMargin} onChange={(value) => setFormat({ ...format, topMargin: value })} />
@@ -1276,7 +1288,7 @@ export default function ScriptEditor() {
             Show scene numbers
           </label>
 
-          <div className="mt-4 flex justify-between">
+          <div className="mt-4 flex flex-wrap justify-between gap-2">
             <button onClick={resetFormatDefaults} className="rounded border border-zinc-300 px-4 py-2 text-sm font-bold">
               Reset Defaults
             </button>
@@ -1296,7 +1308,7 @@ export default function ScriptEditor() {
             <CheckField label="Include scene numbers" checked={exportSettings.includeSceneNumbers} onChange={(checked) => setExportSettings({ ...exportSettings, includeSceneNumbers: checked })} />
             <CheckField label="Include metadata" checked={exportSettings.includeMetadata} onChange={(checked) => setExportSettings({ ...exportSettings, includeMetadata: checked })} />
 
-            <div className="grid grid-cols-2 gap-2 pt-2">
+            <div className="grid grid-cols-1 gap-2 pt-2 sm:grid-cols-2">
               <button onClick={exportFdx} className="rounded bg-zinc-900 px-4 py-2 font-bold text-white">Export FDX</button>
               <button onClick={exportPdf} className="rounded bg-zinc-900 px-4 py-2 font-bold text-white">Export PDF</button>
               <button onClick={exportFountain} className="rounded border border-zinc-300 px-4 py-2 font-bold">Export Fountain</button>
@@ -1362,8 +1374,8 @@ function MenuButton({
 function Dropdown({ left, children }: { left: number; children: ReactNode }) {
   return (
     <div
-      className="absolute top-8 z-50 w-64 rounded border border-zinc-200 bg-white py-1 font-sans text-xs text-zinc-900 shadow-xl"
-      style={{ left }}
+      className="absolute top-8 z-50 w-[min(16rem,calc(100vw-1rem))] rounded border border-zinc-200 bg-white py-1 font-sans text-xs text-zinc-900 shadow-xl"
+      style={{ left: `clamp(0.5rem, ${left}px, calc(100vw - 16.5rem))` }}
       onClick={(e) => e.stopPropagation()}
     >
       {children}
@@ -1517,8 +1529,8 @@ function Modal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 font-sans">
-      <div className="w-full max-w-lg rounded bg-white p-5 text-zinc-900 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3 py-4 font-sans sm:px-4">
+      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded bg-white p-4 text-zinc-900 shadow-2xl sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{title}</h2>
           <button onClick={onClose} className="text-sm text-zinc-500 hover:text-zinc-900">
@@ -1542,8 +1554,8 @@ function LargeModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 font-sans">
-      <div className="w-full max-w-5xl rounded bg-white p-5 text-zinc-900 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3 py-4 font-sans sm:px-4">
+      <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded bg-white p-4 text-zinc-900 shadow-2xl sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{title}</h2>
           <button onClick={onClose} className="text-sm text-zinc-500 hover:text-zinc-900">

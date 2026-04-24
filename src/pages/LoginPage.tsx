@@ -61,11 +61,11 @@ export default function LoginPage() {
   const isLoading = authAction !== null;
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-6 py-10 text-white">
-      <div className="mx-auto grid min-h-[calc(100vh-5rem)] w-full max-w-6xl grid-cols-1 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl md:grid-cols-[1.1fr_0.9fr]">
-        <section className="flex flex-col justify-between border-b border-zinc-800 bg-zinc-900 px-8 py-8 md:border-b-0 md:border-r md:px-10">
+    <main className="min-h-screen bg-zinc-950 px-4 py-4 text-white sm:px-6 sm:py-8">
+      <div className="mx-auto grid w-full max-w-6xl grid-cols-1 overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950 shadow-2xl md:min-h-[calc(100vh-4rem)] md:grid-cols-[1.1fr_0.9fr]">
+        <section className="flex flex-col justify-between border-b border-zinc-800 bg-zinc-900 px-6 py-6 md:border-b-0 md:border-r md:px-10 md:py-8">
           <div>
-            <div className="mb-16 flex items-center gap-3">
+            <div className="mb-10 flex items-center gap-3 md:mb-16">
               <div className="flex h-10 w-10 items-center justify-center rounded border border-zinc-700 bg-zinc-950 font-mono text-sm font-bold">
                 SP
               </div>
@@ -78,7 +78,7 @@ export default function LoginPage() {
             <p className="mb-4 text-xs font-bold uppercase tracking-[0.28em] text-blue-300">
               Write with structure
             </p>
-            <h1 className="max-w-xl text-4xl font-bold leading-tight text-white md:text-5xl">
+            <h1 className="max-w-xl text-3xl font-bold leading-tight text-white sm:text-4xl md:text-5xl">
               A focused writing room for screenplays in progress.
             </h1>
             <p className="mt-6 max-w-lg text-base leading-7 text-zinc-400">
@@ -87,7 +87,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div className="mt-12 grid gap-3 text-sm text-zinc-400 sm:grid-cols-3 md:grid-cols-1 lg:grid-cols-3">
+          <div className="mt-10 grid gap-3 text-sm text-zinc-400 sm:grid-cols-3 md:mt-12 md:grid-cols-1 lg:grid-cols-3">
             <div className="border-t border-zinc-800 pt-4">
               <p className="font-bold text-zinc-200">Industry rhythm</p>
               <p className="mt-1 text-xs leading-5">Scene, action, character, dialogue.</p>
@@ -103,7 +103,7 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="flex items-center justify-center bg-zinc-950 px-6 py-10">
+        <section className="flex items-center justify-center bg-zinc-950 px-5 py-7 sm:px-6 sm:py-10">
           <div className="w-full max-w-sm">
             <div className="mb-8">
               <h2 className="text-2xl font-bold">Welcome back</h2>
