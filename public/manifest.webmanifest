@@ -2,8 +2,9 @@
   "name": "PageOne",
   "short_name": "PageOne",
   "description": "A screenplay writing app for drafting, formatting, and exporting scripts.",
-  "theme_color": "#f4f4f5",
-  "background_color": "#f4f4f5",
+  "start_url": "/",
+  "theme_color": "#09090b",
+  "background_color": "#09090b",
   "display": "standalone",
   "icons": [
     {
