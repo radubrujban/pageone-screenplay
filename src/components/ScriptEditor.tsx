@@ -92,7 +92,6 @@ export default function ScriptEditor() {
     setTitle,
     setScriptId,
     userId,
-    setUserId,
     markUnsynced,
   } = useScriptStore();
 
@@ -266,15 +265,6 @@ export default function ScriptEditor() {
 
     return suggestions;
   }, [activeBlock]);
-
-  useEffect(() => {
-    async function hydrateUser() {
-      const { data } = await supabase.auth.getUser();
-      setUserId(data.user?.id || null);
-    }
-
-    hydrateUser();
-  }, [setUserId]);
 
   const resolvedTitlePage = useMemo<TitlePageData>(
     () => ({

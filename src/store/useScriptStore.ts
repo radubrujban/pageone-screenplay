@@ -2,8 +2,17 @@ import { create } from "zustand";
 import type { Session } from "@supabase/supabase-js";
 import type { ScriptBlock } from "../types/script";
 import { supabase } from "../lib/supabase";
+import {
+  cacheScript,
+  getUnsyncedScriptsByUser,
+} from "../lib/db";
 
-export type SaveStatusValue = "saved" | "saving" | "failed" | "unsynced" | "offline";
+export type SaveStatusValue =
+  | "saved"
+  | "syncing"
+  | "failed"
+  | "unsynced"
+  | "offline";
 
 interface ScriptState {
   blocks: ScriptBlock[];
@@ -17,12 +26,16 @@ interface ScriptState {
   setBlocks: (blocks: ScriptBlock[]) => void;
   setUserId: (id: string | null) => void;
   setAuthSession: (session: Session | null) => void;
+  setAuthReady: (ready: boolean) => void;
+  clearAuth: () => void;
   setScriptId: (id: string | null) => void;
   setTitle: (title: string) => void;
   setSaveStatus: (status: SaveStatusValue) => void;
   markUnsynced: () => void;
 
   saveScript: () => Promise<void>;
+  syncUnsyncedScripts: (forcedUserId?: string | null) => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
 export const useScriptStore = create<ScriptState>((set, get) => ({
@@ -41,6 +54,12 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
     set({
       session,
       userId: session?.user?.id ?? null,
+    }),
+  setAuthReady: (ready) => set({ authReady: ready }),
+  clearAuth: () =>
+    set({
+      session: null,
+      userId: null,
       authReady: true,
     }),
   setScriptId: (id) => set({ scriptId: id }),
@@ -59,19 +78,30 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
 
     if (!scriptId || !userId) return;
 
+    const updatedAt = Date.now();
+
+    await cacheScript({
+      id: scriptId,
+      userId,
+      title: title || "Untitled Script",
+      blocks,
+      updatedAt,
+      unsynced: true,
+    });
+
     if (typeof navigator !== "undefined" && !navigator.onLine) {
       set({ saveStatus: "offline" });
-      throw new Error("Cannot save while offline.");
+      return;
     }
 
-    set({ saveStatus: "saving" });
+    set({ saveStatus: "syncing" });
 
     const { error } = await supabase.from("scripts").upsert({
       id: scriptId,
       user_id: userId,
       title: title || "Untitled Script",
       blocks,
-      updated_at: Date.now(),
+      updated_at: updatedAt,
     });
 
     if (error) {
@@ -79,6 +109,68 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
       throw error;
     }
 
+    await cacheScript({
+      id: scriptId,
+      userId,
+      title: title || "Untitled Script",
+      blocks,
+      updatedAt,
+      unsynced: false,
+    });
+
     set({ saveStatus: "saved" });
+  },
+
+  syncUnsyncedScripts: async (forcedUserId) => {
+    const { userId, saveStatus } = get();
+    const activeUserId = forcedUserId ?? userId;
+
+    if (!activeUserId) return;
+
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      set({ saveStatus: "offline" });
+      return;
+    }
+
+    const unsynced = await getUnsyncedScriptsByUser(activeUserId);
+
+    if (unsynced.length === 0) {
+      if (saveStatus === "offline" || saveStatus === "unsynced") {
+        set({ saveStatus: "saved" });
+      }
+      return;
+    }
+
+    set({ saveStatus: "syncing" });
+
+    let hadError = false;
+
+    for (const script of unsynced) {
+      const { error } = await supabase.from("scripts").upsert({
+        id: script.id,
+        user_id: activeUserId,
+        title: script.title || "Untitled Script",
+        blocks: script.blocks,
+        updated_at: script.updatedAt,
+      });
+
+      if (error) {
+        hadError = true;
+        continue;
+      }
+
+      await cacheScript({
+        ...script,
+        userId: activeUserId,
+        unsynced: false,
+      });
+    }
+
+    set({ saveStatus: hadError ? "failed" : "saved" });
+  },
+
+  signOut: async () => {
+    await supabase.auth.signOut();
+    get().clearAuth();
   },
 }));

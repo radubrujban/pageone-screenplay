@@ -3,6 +3,8 @@ import { supabase } from "../lib/supabase";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "../components/AppLayout";
 import type { ScriptBlock } from "../types/script";
+import { cacheRemoteScripts, cacheScript, getCachedScriptsByUser } from "../lib/db";
+import { useScriptStore } from "../store/useScriptStore";
 
 type Script = {
   id: string;
@@ -16,49 +18,90 @@ export default function DashboardPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [renamingScript, setRenamingScript] = useState<Script | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
+  const authReady = useScriptStore((state) => state.authReady);
+  const authUserId = useScriptStore((state) => state.userId);
+  const authSession = useScriptStore((state) => state.session);
+  const setSaveStatus = useScriptStore((state) => state.setSaveStatus);
   const navigate = useNavigate();
 
   async function fetchScripts() {
-    const { data: userData, error: userError } = await supabase.auth.getUser();
-    const id = userData.user?.id ?? null;
+    const id = authUserId ?? authSession?.user?.id ?? null;
 
-    if (userError || !id) {
+    if (!id) {
       navigate("/login");
       return;
     }
 
-    const { data } = await supabase
-      .from("scripts")
-      .select("*")
-      .eq("user_id", id)
-      .order("updated_at", { ascending: false });
+    setUserId(id);
 
-    if (data) setScripts(data as Script[]);
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadInitialScripts() {
-      const { data: userData, error: userError } = await supabase.auth.getUser();
-      const id = userData.user?.id ?? null;
-
-      if (cancelled) return;
-
-      if (userError || !id) {
-        navigate("/login");
-        return;
-      }
-
-      setUserId(id);
-
+    if (navigator.onLine) {
       const { data } = await supabase
         .from("scripts")
         .select("*")
         .eq("user_id", id)
         .order("updated_at", { ascending: false });
 
-      if (!cancelled && data) setScripts(data as Script[]);
+      if (data) {
+        setScripts(data as Script[]);
+        await cacheRemoteScripts(id, data as Script[]);
+        return;
+      }
+    }
+
+    const cached = await getCachedScriptsByUser(id);
+    setScripts(
+      cached.map((script) => ({
+        id: script.id,
+        title: script.title,
+        blocks: script.blocks,
+        updated_at: script.updatedAt,
+      }))
+    );
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadInitialScripts() {
+      if (!authReady) return;
+
+      const id = authUserId ?? authSession?.user?.id ?? null;
+
+      if (cancelled) return;
+
+      if (!id) {
+        navigate("/login");
+        return;
+      }
+
+      setUserId(id);
+
+      if (navigator.onLine) {
+        const { data } = await supabase
+          .from("scripts")
+          .select("*")
+          .eq("user_id", id)
+          .order("updated_at", { ascending: false });
+
+        if (!cancelled && data) {
+          setScripts(data as Script[]);
+          await cacheRemoteScripts(id, data as Script[]);
+          return;
+        }
+      }
+
+      const cached = await getCachedScriptsByUser(id);
+
+      if (!cancelled) {
+        setScripts(
+          cached.map((script) => ({
+            id: script.id,
+            title: script.title,
+            blocks: script.blocks,
+            updated_at: script.updatedAt,
+          }))
+        );
+      }
     }
 
     loadInitialScripts();
@@ -66,14 +109,13 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [navigate]);
+  }, [authReady, authSession?.user?.id, authUserId, navigate]);
 
   async function createNewScript() {
     let currentUserId = userId;
 
     if (!currentUserId) {
-      const { data: userData } = await supabase.auth.getUser();
-      currentUserId = userData.user?.id ?? null;
+      currentUserId = authUserId ?? authSession?.user?.id ?? null;
       setUserId(currentUserId);
     }
 
@@ -83,20 +125,36 @@ export default function DashboardPage() {
     }
 
     const newId = crypto.randomUUID();
+    const updatedAt = Date.now();
+    const blocks = [
+      {
+        id: crypto.randomUUID(),
+        type: "action",
+        text: "FADE IN:",
+      },
+    ] as ScriptBlock[];
 
-    await supabase.from("scripts").insert({
+    await cacheScript({
       id: newId,
-      user_id: currentUserId,
+      userId: currentUserId,
       title: "Untitled Script",
-      blocks: [
-        {
-          id: crypto.randomUUID(),
-          type: "action",
-          text: "FADE IN:",
-        },
-      ],
-      updated_at: Date.now(),
+      blocks,
+      updatedAt,
+      unsynced: !navigator.onLine,
     });
+
+    if (navigator.onLine) {
+      await supabase.from("scripts").insert({
+        id: newId,
+        user_id: currentUserId,
+        title: "Untitled Script",
+        blocks,
+        updated_at: updatedAt,
+      });
+      setSaveStatus("saved");
+    } else {
+      setSaveStatus("offline");
+    }
 
     navigate(`/script/${newId}`);
   }

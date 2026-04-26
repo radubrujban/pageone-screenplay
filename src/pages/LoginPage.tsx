@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabase";
 import { useNavigate } from "react-router-dom";
 import { useScriptStore } from "../store/useScriptStore";
@@ -11,15 +11,44 @@ export default function LoginPage() {
   const [authAction, setAuthAction] = useState<AuthAction>(null);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"error" | "success">("error");
+  const [isOffline, setIsOffline] = useState(
+    typeof navigator !== "undefined" ? !navigator.onLine : false
+  );
 
   const navigate = useNavigate();
   const { setUserId } = useScriptStore();
 
+  useEffect(() => {
+    function handleOffline() {
+      setIsOffline(true);
+    }
+
+    function handleOnline() {
+      setIsOffline(false);
+    }
+
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, []);
+
   async function handleLogin() {
+    if (isOffline) {
+      setMessageType("error");
+      setMessage(
+        "You’re offline. Reconnect to sign in, or reopen after logging in once online."
+      );
+      return;
+    }
+
     setAuthAction("login");
     setMessage("");
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -31,13 +60,20 @@ export default function LoginPage() {
       return;
     }
 
-    const { data } = await supabase.auth.getUser();
     setUserId(data.user?.id || null);
 
     navigate("/dashboard");
   }
 
   async function handleSignUp() {
+    if (isOffline) {
+      setMessageType("error");
+      setMessage(
+        "You’re offline. Reconnect to sign in, or reopen after logging in once online."
+      );
+      return;
+    }
+
     setAuthAction("signup");
     setMessage("");
 
@@ -125,6 +161,13 @@ export default function LoginPage() {
               </div>
             )}
 
+            {isOffline && !message && (
+              <div className="mb-5 rounded border border-amber-900/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
+                You’re offline. Reconnect to sign in, or reopen after logging in
+                once online.
+              </div>
+            )}
+
             <label className="mb-4 block text-sm font-medium text-zinc-300">
               Email
               <input
@@ -132,7 +175,7 @@ export default function LoginPage() {
                 placeholder="writer@example.com"
                 type="email"
                 value={email}
-                disabled={isLoading}
+                disabled={isLoading || isOffline}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </label>
@@ -144,7 +187,7 @@ export default function LoginPage() {
                 placeholder="Your password"
                 type="password"
                 value={password}
-                disabled={isLoading}
+                disabled={isLoading || isOffline}
                 onChange={(e) => setPassword(e.target.value)}
               />
             </label>
@@ -152,7 +195,7 @@ export default function LoginPage() {
             <div className="space-y-3">
               <button
                 onClick={handleLogin}
-                disabled={isLoading}
+                disabled={isLoading || isOffline}
                 className="w-full rounded bg-blue-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:bg-blue-900 disabled:text-blue-200"
               >
                 {authAction === "login" ? "Signing in..." : "Sign In"}
@@ -160,7 +203,7 @@ export default function LoginPage() {
 
               <button
                 onClick={handleSignUp}
-                disabled={isLoading}
+                disabled={isLoading || isOffline}
                 className="w-full rounded border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm font-bold text-zinc-100 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {authAction === "signup" ? "Creating account..." : "Create Account"}

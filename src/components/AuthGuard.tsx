@@ -8,7 +8,7 @@ export default function AuthGuard({
   children: React.ReactNode;
 }) {
   const authReady = useScriptStore((state) => state.authReady);
-  const userId = useScriptStore((state) => state.userId);
+  const session = useScriptStore((state) => state.session);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -16,12 +16,12 @@ export default function AuthGuard({
       return;
     }
 
-    if (!userId) {
+    if (!session) {
       navigate("/login", { replace: true });
     }
-  }, [authReady, userId, navigate]);
+  }, [authReady, session, navigate]);
 
-  if (!authReady || !userId) {
+  if (!authReady || !session) {
     return (
       <div className="min-h-screen bg-zinc-950 text-white flex items-center justify-center">
         Loading...
