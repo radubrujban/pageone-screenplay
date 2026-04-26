@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase";
 import { useNavigate } from "react-router-dom";
 import AppLayout from "../components/AppLayout";
 import type { ScriptBlock } from "../types/script";
+import type { CachedScript } from "../lib/db";
 import { cacheRemoteScripts, cacheScript, getCachedScriptsByUser } from "../lib/db";
 import { useScriptStore } from "../store/useScriptStore";
 
@@ -50,7 +51,7 @@ export default function DashboardPage() {
 
     const cached = await getCachedScriptsByUser(id);
     setScripts(
-      cached.map((script) => ({
+      cached.map((script: CachedScript) => ({
         id: script.id,
         title: script.title,
         blocks: script.blocks,
@@ -94,7 +95,7 @@ export default function DashboardPage() {
 
       if (!cancelled) {
         setScripts(
-          cached.map((script) => ({
+          cached.map((script: CachedScript) => ({
             id: script.id,
             title: script.title,
             blocks: script.blocks,
@@ -187,9 +188,9 @@ export default function DashboardPage() {
 
   function scriptStats(script: Script) {
     const blocks = script.blocks || [];
-    const scenes = blocks.filter((block) => block.type === "scene").length;
+    const scenes = blocks.filter((block: ScriptBlock) => block.type === "scene").length;
     const words = blocks
-      .map((block) => block.text.trim())
+      .map((block: ScriptBlock) => block.text.trim())
       .join(" ")
       .split(/\s+/)
       .filter(Boolean).length;
@@ -251,7 +252,7 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {scripts.map((script) => {
+            {scripts.map((script: Script) => {
               const stats = scriptStats(script);
 
               return (
