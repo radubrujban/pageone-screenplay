@@ -28,7 +28,7 @@ import type {
   TitlePageData,
 } from "../lib/screenplayFormat";
 import AppLayout from "./AppLayout";
-import SaveStatus from "./SaveStatus";
+import ScriptToolbar from "./ScriptToolbar";
 import { useScriptStore } from "../store/useScriptStore";
 import type { RevisionColor, ScriptBlock } from "../types/script";
 
@@ -112,8 +112,7 @@ export default function ScriptEditor() {
 
   const [productionMode, setProductionMode] = useState(false);
   const [revisionMode, setRevisionMode] = useState(false);
-  const [currentRevisionColor, setCurrentRevisionColor] =
-    useState<RevisionColor>("blue");
+  const [currentRevisionColor] = useState<RevisionColor>("blue");
   const [focusMode, setFocusMode] = useState(false);
   const [pageScale, setPageScale] = useState(1);
 
@@ -621,6 +620,18 @@ export default function ScriptEditor() {
     setFormat(defaultFormat);
   }
 
+  function showCollaborationPlaceholder() {
+    alert("Collaboration coming soon.");
+  }
+
+  function showSplitPlaceholder() {
+    alert("Split view coming soon.");
+  }
+
+  function showBeatBoardPlaceholder() {
+    alert("Beat Board coming soon.");
+  }
+
   function analyzeScript() {
     const notesOut: string[] = [];
 
@@ -675,6 +686,42 @@ export default function ScriptEditor() {
     ]);
 
     markUnsynced();
+    closeMenus();
+  }
+
+  function toggleWritingStatsPanel() {
+    if (showRightPanel && rightPanelMode === "stats") {
+      setShowRightPanel(false);
+      return;
+    }
+
+    setShowRightPanel(true);
+    setRightPanelMode("stats");
+    closeMenus();
+  }
+
+  function toggleFeedbackPanel() {
+    if (showRightPanel && rightPanelMode === "feedback") {
+      setShowRightPanel(false);
+      return;
+    }
+
+    setShowRightPanel(true);
+    setRightPanelMode("feedback");
+    closeMenus();
+  }
+
+  function toggleViewsMenu() {
+    setActiveMenu((current) => (current === "view" ? null : "view"));
+  }
+
+  function toggleRightPanel() {
+    setShowRightPanel((value) => !value);
+    closeMenus();
+  }
+
+  function toggleNavigatorPanel() {
+    setShowNavigator((value) => !value);
     closeMenus();
   }
 
@@ -862,85 +909,28 @@ export default function ScriptEditor() {
           )}
         </div>
 
-        <div className="flex min-h-14 flex-wrap items-start gap-2 overflow-x-auto bg-white px-3 py-2 font-sans sm:items-center sm:justify-between sm:gap-4 sm:px-4">
-          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:min-w-max sm:flex-nowrap">
-            <div className="flex items-center gap-2 rounded border border-zinc-200 bg-zinc-50 px-2 py-1 shadow-sm">
-              <button onClick={() => setShowTitlePage(true)} className="rounded px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-white hover:text-zinc-950">
-                Title Page
-              </button>
-
-              <button onClick={() => setShowFormatSettings(true)} className="rounded px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-white hover:text-zinc-950">
-                Format
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2 rounded border border-zinc-200 bg-zinc-50 px-2 py-1 shadow-sm">
-              <span className="px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                Element
-              </span>
-
-              <select
-                value={activeBlock?.type || "action"}
-                onChange={(e) => {
-                  if (effectiveActiveBlockId) {
-                    updateBlockType(
-                      effectiveActiveBlockId,
-                      e.target.value as ScriptBlock["type"]
-                    );
-                  }
-                }}
-                className="rounded border border-zinc-300 bg-white px-3 py-1.5 text-xs text-zinc-800 shadow-inner"
-              >
-                <option value="scene">Scene Heading</option>
-                <option value="action">Action</option>
-                <option value="character">Character</option>
-                <option value="dialogue">Dialogue</option>
-              </select>
-
-              <button onClick={() => insertBlock("scene")} className="rounded px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-white hover:text-zinc-950">
-                + Scene
-              </button>
-
-              <button onClick={() => insertBlock("action")} className="rounded px-3 py-1.5 text-xs font-bold text-zinc-700 hover:bg-white hover:text-zinc-950">
-                + Element
-              </button>
-            </div>
-
-            <div className="flex items-center gap-2 rounded border border-zinc-200 bg-zinc-50 px-2 py-1 shadow-sm">
-              <span className="px-1 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                Revision
-              </span>
-
-              <select
-                value={currentRevisionColor}
-                onChange={(e) => setCurrentRevisionColor(e.target.value as RevisionColor)}
-                className="rounded border border-zinc-300 bg-white px-2 py-1.5 text-xs text-zinc-800 shadow-inner"
-              >
-                {revisionColors.map((color) => (
-                  <option key={color} value={color}>
-                    {color === "none" ? "No Revision" : `${color} Revision`}
-                  </option>
-                ))}
-              </select>
-
-              {productionMode && <Badge color="yellow">Production</Badge>}
-              {revisionMode && <Badge color="blue">Revision Mode</Badge>}
-              {activeBlock?.locked && <Badge color="red">Locked</Badge>}
-            </div>
-          </div>
-
-          <div className="flex w-full flex-wrap items-center gap-2 rounded border border-zinc-200 bg-zinc-50 px-3 py-2 shadow-sm sm:w-auto sm:min-w-max sm:flex-nowrap sm:gap-4">
-            <span className="text-xs text-zinc-500">
-              {stats.words} words · {stats.scenes} scenes · ~{stats.estimatedPages} pages
-            </span>
-
-            <span className="text-xs text-zinc-500">
-              Zoom {Math.round(pageScale * 100)}%
-            </span>
-
-            <SaveStatus className="hidden sm:inline" />
-          </div>
-        </div>
+        <ScriptToolbar
+          title={title || "Untitled Script"}
+          activeElementType={activeBlock?.type || "action"}
+          onChangeElementType={(type) => {
+            if (effectiveActiveBlockId) {
+              updateBlockType(effectiveActiveBlockId, type);
+            }
+          }}
+          onCollaboration={showCollaborationPlaceholder}
+          onSplit={showSplitPlaceholder}
+          onViews={toggleViewsMenu}
+          onBeatBoard={showBeatBoardPlaceholder}
+          onTitlePage={() => setShowTitlePage(true)}
+          onWritingStats={toggleWritingStatsPanel}
+          onShowHide={toggleRightPanel}
+          onNavigator={toggleNavigatorPanel}
+          onFeedback={toggleFeedbackPanel}
+          isStatsActive={showRightPanel && rightPanelMode === "stats"}
+          isShowHideActive={showRightPanel}
+          isNavigatorActive={showNavigator}
+          isFeedbackActive={showRightPanel && rightPanelMode === "feedback"}
+        />
       </header>
 
       <div
@@ -1422,23 +1412,6 @@ function PanelButton({
       {label}
     </button>
   );
-}
-
-function Badge({
-  children,
-  color,
-}: {
-  children: ReactNode;
-  color: "yellow" | "blue" | "red";
-}) {
-  const className =
-    color === "yellow"
-      ? "bg-yellow-100 text-yellow-800"
-      : color === "blue"
-      ? "bg-blue-100 text-blue-800"
-      : "bg-red-100 text-red-800";
-
-  return <span className={`rounded px-2 py-1 text-xs font-bold ${className}`}>{children}</span>;
 }
 
 function NumberField({
