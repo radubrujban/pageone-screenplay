@@ -14,6 +14,15 @@ type Script = {
   blocks?: ScriptBlock[];
 };
 
+function mapCachedScripts(cached: CachedScript[]): Script[] {
+  return cached.map((script: CachedScript) => ({
+    id: script.id,
+    title: script.title,
+    blocks: script.blocks,
+    updated_at: script.updatedAt,
+  }));
+}
+
 export default function DashboardPage() {
   const [scripts, setScripts] = useState<Script[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
@@ -34,8 +43,15 @@ export default function DashboardPage() {
     }
 
     setUserId(id);
+    const cached = await getCachedScriptsByUser(id);
+    setScripts(mapCachedScripts(cached));
 
-    if (navigator.onLine) {
+    if (!navigator.onLine) {
+      setSaveStatus("offline");
+      return;
+    }
+
+    try {
       const { data } = await supabase
         .from("scripts")
         .select("*")
@@ -45,19 +61,14 @@ export default function DashboardPage() {
       if (data) {
         setScripts(data as Script[]);
         await cacheRemoteScripts(id, data as Script[]);
+        setSaveStatus("saved");
         return;
       }
+    } catch (error) {
+      console.error(error);
+      setSaveStatus(navigator.onLine ? "failed" : "offline");
+      return;
     }
-
-    const cached = await getCachedScriptsByUser(id);
-    setScripts(
-      cached.map((script: CachedScript) => ({
-        id: script.id,
-        title: script.title,
-        blocks: script.blocks,
-        updated_at: script.updatedAt,
-      }))
-    );
   }
 
   useEffect(() => {
@@ -76,8 +87,18 @@ export default function DashboardPage() {
       }
 
       setUserId(id);
+      const cached = await getCachedScriptsByUser(id);
 
-      if (navigator.onLine) {
+      if (!cancelled) {
+        setScripts(mapCachedScripts(cached));
+      }
+
+      if (!navigator.onLine) {
+        setSaveStatus("offline");
+        return;
+      }
+
+      try {
         const { data } = await supabase
           .from("scripts")
           .select("*")
@@ -87,21 +108,15 @@ export default function DashboardPage() {
         if (!cancelled && data) {
           setScripts(data as Script[]);
           await cacheRemoteScripts(id, data as Script[]);
+          setSaveStatus("saved");
           return;
         }
-      }
-
-      const cached = await getCachedScriptsByUser(id);
-
-      if (!cancelled) {
-        setScripts(
-          cached.map((script: CachedScript) => ({
-            id: script.id,
-            title: script.title,
-            blocks: script.blocks,
-            updated_at: script.updatedAt,
-          }))
-        );
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setSaveStatus(navigator.onLine ? "failed" : "offline");
+        }
+        return;
       }
     }
 
@@ -110,7 +125,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [authReady, authSession?.user?.id, authUserId, navigate]);
+  }, [authReady, authSession?.user?.id, authUserId, navigate, setSaveStatus]);
 
   async function createNewScript() {
     let currentUserId = userId;
