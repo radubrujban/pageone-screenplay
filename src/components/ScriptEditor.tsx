@@ -346,6 +346,14 @@ export default function ScriptEditor() {
     pendingFocusBlockId.current = id ?? null;
   }
 
+  function focusBlockCursorAfterRender(
+    id: string | null | undefined,
+    position: number
+  ) {
+    if (!id) return;
+    pendingCursorPosition.current = { id, position };
+  }
+
   const runSave = useCallback(async () => {
     if (isSaving.current) return;
 
@@ -750,6 +758,8 @@ export default function ScriptEditor() {
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>, index: number) {
     const current = blocks[index];
+    const selectionStart = e.currentTarget.selectionStart ?? 0;
+    const selectionEnd = e.currentTarget.selectionEnd ?? 0;
     const activeSuggestions =
       dismissedSuggestionBlockId === current.id
         ? null
@@ -833,6 +843,32 @@ export default function ScriptEditor() {
       return;
     }
 
+    if (e.key === "ArrowUp") {
+      if (selectionStart === 0 && selectionEnd === 0 && index > 0) {
+        e.preventDefault();
+        const previousBlock = blocks[index - 1];
+        if (!previousBlock) return;
+        setActiveBlockId(previousBlock.id);
+        focusBlockCursorAfterRender(previousBlock.id, previousBlock.text.length);
+      }
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      if (
+        selectionStart === current.text.length &&
+        selectionEnd === current.text.length &&
+        index < blocks.length - 1
+      ) {
+        e.preventDefault();
+        const nextBlock = blocks[index + 1];
+        if (!nextBlock) return;
+        setActiveBlockId(nextBlock.id);
+        focusBlockCursorAfterRender(nextBlock.id, 0);
+      }
+      return;
+    }
+
     if (e.key === "Enter") {
       if (e.shiftKey) {
         return;
@@ -866,18 +902,46 @@ export default function ScriptEditor() {
       return;
     }
 
-    if (
-      e.key === "Backspace" &&
-      current.text.trim() === "" &&
-      blocks.length > 1
-    ) {
-      e.preventDefault();
-      const updated = blocks.filter((_, blockIndex) => blockIndex !== index);
-      const nextActiveId = updated[Math.max(0, index - 1)]?.id || null;
-      setBlocks(updated);
-      focusBlockAfterRender(nextActiveId);
-      setActiveBlockId(nextActiveId);
-      markUnsynced();
+    if (e.key === "Backspace") {
+      if (current.text.trim() === "" && blocks.length > 1) {
+        e.preventDefault();
+        const updated = blocks.filter((_, blockIndex) => blockIndex !== index);
+        const previousBlock = updated[Math.max(0, index - 1)] ?? null;
+        setBlocks(updated);
+        if (previousBlock) {
+          setActiveBlockId(previousBlock.id);
+          focusBlockCursorAfterRender(previousBlock.id, previousBlock.text.length);
+        } else {
+          setActiveBlockId(null);
+        }
+        markUnsynced();
+        return;
+      }
+
+      if (
+        selectionStart === 0 &&
+        selectionEnd === 0 &&
+        index > 0 &&
+        blocks.length > 1
+      ) {
+        const previousBlock = blocks[index - 1];
+        if (!previousBlock || previousBlock.locked) return;
+
+        e.preventDefault();
+        const mergedText = `${previousBlock.text}${current.text}`;
+        const previousEnd = previousBlock.text.length;
+
+        const updated = blocks
+          .map((block, blockIndex) =>
+            blockIndex === index - 1 ? { ...block, text: mergedText } : block
+          )
+          .filter((_, blockIndex) => blockIndex !== index);
+
+        setBlocks(updated);
+        setActiveBlockId(previousBlock.id);
+        focusBlockCursorAfterRender(previousBlock.id, previousEnd);
+        markUnsynced();
+      }
     }
   }
 
