@@ -11,3 +11,4 @@
 - Added Playwright coverage for editor pagination, existing-script rendering, and writing stability
 - PDF export now follows editor visual pagination more closely.
 - Fountain export formatting is cleaner for screenplay block flow.
+- Updated the login page to match PageOne’s editorial visual identity.
