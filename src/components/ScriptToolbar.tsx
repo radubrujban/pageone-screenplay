@@ -2,10 +2,9 @@ import {
   ArrowLeft,
   Download,
   FilePlus2,
-  FileText,
   Lightbulb,
+  Printer,
   Save,
-  Settings2,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import SaveStatus from "./SaveStatus";
@@ -17,11 +16,8 @@ type ScriptToolbarProps = {
   onBackToDashboard: () => void;
   onNewScript: () => void;
   onSaveNow: () => void;
-  onToggleTitlePage: () => void;
-  isTitlePageVisible: boolean;
   onOpenExportSettings: () => void;
   onPrint: () => void;
-  onOpenFormatSettings: () => void;
   showFormatTips: boolean;
   onToggleFormatTips: () => void;
 };
@@ -72,11 +68,8 @@ export default function ScriptToolbar({
   onBackToDashboard,
   onNewScript,
   onSaveNow,
-  onToggleTitlePage,
-  isTitlePageVisible,
   onOpenExportSettings,
   onPrint,
-  onOpenFormatSettings,
   showFormatTips,
   onToggleFormatTips,
 }: ScriptToolbarProps) {
@@ -84,12 +77,12 @@ export default function ScriptToolbar({
     activeElementType === "scene" ? "scene_heading" : activeElementType;
 
   return (
-    <div className="border-b border-zinc-300 bg-zinc-100/95 backdrop-blur">
+    <div className="border-b border-zinc-200 bg-zinc-50/95 backdrop-blur">
       <div
-        className="mx-auto flex min-h-[56px] w-full max-w-[1600px] items-center gap-3 overflow-x-auto px-3 py-2 sm:px-4"
+        className="mx-auto grid min-h-[56px] w-full max-w-[1600px] grid-cols-1 items-center gap-2 px-3 py-2 sm:px-4 lg:grid-cols-[1fr_auto_1fr] lg:gap-3"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex min-w-fit flex-1 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           <ToolbarButton
             label="Back"
             icon={ArrowLeft}
@@ -107,13 +100,7 @@ export default function ScriptToolbar({
           />
         </div>
 
-        <div className="flex min-w-fit flex-1 items-center justify-center gap-2">
-          <ToolbarButton
-            label={isTitlePageVisible ? "Hide Title Page" : "Show Title Page"}
-            icon={FileText}
-            onClick={onToggleTitlePage}
-            active={isTitlePageVisible}
-          />
+        <div className="flex min-w-0 items-center justify-start gap-2 lg:justify-center">
           <select
             title="Element Type"
             value={selectedElementType}
@@ -132,27 +119,14 @@ export default function ScriptToolbar({
             <option value="general">General</option>
           </select>
           <ToolbarButton
-            label="Format"
-            icon={Settings2}
-            onClick={onOpenFormatSettings}
-          />
-          <ToolbarButton
             label="Tips"
             icon={Lightbulb}
             onClick={onToggleFormatTips}
             active={showFormatTips}
           />
-          <button
-            type="button"
-            disabled
-            title="Rich text tools coming soon."
-            className="inline-flex h-8 items-center rounded-md border border-zinc-200 bg-zinc-100 px-2.5 text-xs font-medium text-zinc-400"
-          >
-            Writing Tools
-          </button>
         </div>
 
-        <div className="flex min-w-fit flex-1 items-center justify-end gap-1.5">
+        <div className="flex min-w-0 items-center justify-start gap-1.5 lg:justify-end">
           <ToolbarButton
             label="Export"
             icon={Download}
@@ -160,12 +134,10 @@ export default function ScriptToolbar({
           />
           <ToolbarButton
             label="Print"
-            icon={Download}
+            icon={Printer}
             onClick={onPrint}
           />
-          <div className="rounded border border-zinc-200 bg-white px-2 py-1">
-            <SaveStatus />
-          </div>
+          <SaveStatus className="ml-1 whitespace-nowrap" />
         </div>
       </div>
     </div>

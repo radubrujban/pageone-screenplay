@@ -58,7 +58,10 @@ export default function DashboardPage() {
 
     for (const script of sortedScripts) {
       const blocks = script.blocks || [];
-      scenes += blocks.filter((block: ScriptBlock) => block.type === "scene").length;
+      scenes += blocks.filter(
+        (block: ScriptBlock) =>
+          block.type === "scene_heading" || block.type === "scene"
+      ).length;
       words += blocks
         .map((block: ScriptBlock) => block.text.trim())
         .join(" ")
@@ -279,82 +282,75 @@ export default function DashboardPage() {
   }
 
   return (
-    <AppLayout showSaveStatus>
-      <div className="mx-auto w-full max-w-6xl space-y-6">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
-          <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6 lg:p-8">
-            <div className="mx-auto max-w-2xl text-center">
-              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-xl border border-zinc-300 bg-zinc-100 text-xl font-bold tracking-wide text-zinc-700">
-                P1
-              </div>
-              <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 sm:text-4xl">
-                Welcome to PageOne
-              </h1>
-              <p className="mt-3 text-sm leading-6 text-zinc-600">
-                Start a new draft fast, open recent work, and jump into writing.
-              </p>
-              <p className="mt-2 text-[11px] uppercase tracking-[0.16em] text-zinc-500">
-                Build Preview
-              </p>
-            </div>
+    <AppLayout>
+      <div className="mx-auto w-full max-w-5xl space-y-8 sm:space-y-10">
+        <section className="rounded-[2rem] border border-orange-100 bg-[#fff7ef] px-5 py-10 shadow-[0_10px_30px_rgba(194,99,46,0.08)] sm:px-8 sm:py-14">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">
+              PageOne
+            </p>
 
-            <div className="mt-8 grid gap-3 sm:grid-cols-2">
-              <LaunchTile
-                title="Quick Start"
-                subtitle="Create a new script"
-                onClick={createNewScript}
-                highlighted
-              />
-              <LaunchTile
-                title="Idea to Script"
-                subtitle="Turn notes into a first draft"
-                onClick={() => alert("Idea to Script is coming soon.")}
-              />
-              <LaunchTile
-                title="Choose Template"
-                subtitle="Start from screenplay templates"
-                onClick={() => alert("Templates are coming soon.")}
-              />
-              <LaunchTile
-                title="Open Recent"
-                subtitle={
-                  newestScript
-                    ? `Open ${newestScript.title || "Untitled Script"}`
-                    : "No recent scripts yet"
-                }
-                onClick={openNewestScript}
-                disabled={!newestScript}
-              />
-            </div>
-          </section>
+            <h1 className="mt-8 text-4xl font-semibold tracking-tight text-zinc-900 sm:text-5xl">
+              Write something real.
+            </h1>
+            <p className="mx-auto mt-4 max-w-xl text-sm leading-7 text-zinc-600 sm:text-base">
+              No AI. No noise. Just you and the page.
+            </p>
 
-          <aside className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
-            <div className="flex items-center justify-between gap-3 border-b border-zinc-200 pb-3">
-              <h2 className="text-base font-semibold text-zinc-900">Recent Scripts</h2>
+            <div className="mt-9">
               <button
                 onClick={createNewScript}
-                className="rounded border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-100"
+                className="rounded-xl border border-[#f2a56f] bg-[#ee9b63] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(238,155,99,0.25)] transition hover:bg-[#e78f56]"
               >
-                New
+                Start Writing
               </button>
             </div>
 
-            {recentScripts.length === 0 ? (
-              <div className="py-8 text-center">
-                <p className="text-sm text-zinc-600">
-                  No scripts yet. Start your first draft.
-                </p>
-              </div>
-            ) : (
-              <ul className="mt-3 space-y-2">
-                {recentScripts.map((script: Script) => (
-                  <li
-                    key={script.id}
-                    className="rounded-lg border border-zinc-200 bg-zinc-50 p-3"
-                  >
+            <div className="mt-5 flex flex-col items-center justify-center gap-2.5 sm:flex-row">
+              <button
+                onClick={openNewestScript}
+                disabled={!newestScript}
+                className="rounded-lg border border-orange-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Open Recent
+              </button>
+              <button
+                onClick={() => alert("Templates are coming soon.")}
+                className="rounded-lg border border-orange-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-orange-50"
+              >
+                Templates
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section className="mx-auto w-full max-w-3xl rounded-2xl border border-zinc-200 bg-white/95 p-4 shadow-sm sm:p-6">
+          <div className="flex items-center justify-between gap-3 border-b border-zinc-200 pb-3">
+            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-zinc-600">
+              Recent Scripts
+            </h2>
+            <button
+              onClick={createNewScript}
+              className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-[#a44f20] transition hover:bg-orange-100"
+            >
+              New Script
+            </button>
+          </div>
+
+          {recentScripts.length === 0 ? (
+            <div className="py-10 text-center">
+              <p className="text-sm text-zinc-600">
+                No drafts yet. Start writing and your scripts will appear here.
+              </p>
+            </div>
+          ) : (
+            <ul className="mt-2 divide-y divide-zinc-100">
+              {recentScripts.map((script: Script) => (
+                <li key={script.id} className="py-3.5">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     <button
                       onClick={() => navigate(`/script/${script.id}`)}
-                      className="w-full text-left"
+                      className="text-left"
                     >
                       <p className="line-clamp-1 text-sm font-semibold text-zinc-900">
                         {script.title || "Untitled Script"}
@@ -364,7 +360,7 @@ export default function DashboardPage() {
                       </p>
                     </button>
 
-                    <div className="mt-2 flex items-center gap-3">
+                    <div className="flex items-center gap-3">
                       <button
                         onClick={() => startRename(script)}
                         className="text-xs font-semibold text-zinc-500 transition hover:text-zinc-900"
@@ -378,52 +374,36 @@ export default function DashboardPage() {
                         Delete
                       </button>
                     </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </aside>
-        </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
 
-        <div className="grid gap-4 lg:grid-cols-2">
-          <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-zinc-600">
-              Writing Snapshot
-            </h3>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Stat label="Scripts" value={writingSnapshot.scripts} />
-              <Stat label="Pages" value={`~${writingSnapshot.pages}`} />
-              <Stat label="Scenes" value={writingSnapshot.scenes} />
-              <Stat label="Words" value={writingSnapshot.words} />
+        <section className="mx-auto w-full max-w-3xl rounded-xl border border-orange-100 bg-[#fffaf5] p-4 sm:p-5">
+          <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-zinc-600">
+            Writing Snapshot
+          </h3>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-lg border border-orange-100 bg-white px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">Scripts</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-900">{writingSnapshot.scripts}</p>
             </div>
-          </section>
-
-          <section className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-zinc-600">
-              More
-            </h3>
-            <div className="mt-4 grid gap-2 sm:grid-cols-3">
-              <button
-                onClick={() => alert("Resources coming soon.")}
-                className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100"
-              >
-                Resources
-              </button>
-              <button
-                onClick={() => alert("Settings coming soon.")}
-                className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100"
-              >
-                Settings
-              </button>
-              <button
-                onClick={() => alert("Import Script coming soon.")}
-                className="rounded-lg border border-zinc-300 bg-zinc-50 px-3 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-100"
-              >
-                Import Script
-              </button>
+            <div className="rounded-lg border border-orange-100 bg-white px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">Pages</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-900">~{writingSnapshot.pages}</p>
             </div>
-          </section>
-        </div>
+            <div className="rounded-lg border border-orange-100 bg-white px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">Scenes</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-900">{writingSnapshot.scenes}</p>
+            </div>
+            <div className="rounded-lg border border-orange-100 bg-white px-3 py-2">
+              <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">Words</p>
+              <p className="mt-1 text-sm font-semibold text-zinc-900">{writingSnapshot.words}</p>
+            </div>
+          </div>
+        </section>
       </div>
 
       {renamingScript && (
@@ -453,7 +433,7 @@ export default function DashboardPage() {
               </button>
               <button
                 onClick={() => renameScript(renamingScript.id, renameTitle)}
-                className="rounded bg-blue-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-blue-500"
+                className="rounded bg-[#ee9b63] px-4 py-2 text-sm font-bold text-white transition hover:bg-[#e78f56]"
               >
                 Save Name
               </button>
@@ -462,45 +442,5 @@ export default function DashboardPage() {
         </div>
       )}
     </AppLayout>
-  );
-}
-
-function LaunchTile({
-  title,
-  subtitle,
-  onClick,
-  highlighted = false,
-  disabled = false,
-}: {
-  title: string;
-  subtitle: string;
-  onClick: () => void;
-  highlighted?: boolean;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`rounded-xl border p-4 text-left transition ${
-        highlighted
-          ? "border-blue-500 bg-blue-50 hover:bg-blue-100"
-          : "border-zinc-200 bg-zinc-50 hover:bg-zinc-100"
-      } ${disabled ? "cursor-not-allowed opacity-50" : ""}`}
-    >
-      <p className="text-sm font-semibold text-zinc-900">{title}</p>
-      <p className="mt-1 text-xs text-zinc-600">{subtitle}</p>
-    </button>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number | string }) {
-  return (
-    <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-      <p className="text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-        {label}
-      </p>
-      <p className="mt-1 text-sm font-bold text-zinc-800">{value}</p>
-    </div>
   );
 }

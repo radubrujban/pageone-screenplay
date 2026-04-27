@@ -36,15 +36,6 @@ import ScriptToolbar from "./ScriptToolbar";
 import { useScriptStore } from "../store/useScriptStore";
 import type { RevisionColor, ScriptBlock } from "../types/script";
 
-type MenuName =
-  | "file"
-  | "edit"
-  | "insert"
-  | "tools"
-  | "production"
-  | "help"
-  | null;
-
 const VISUAL_PAGE_MAX_WIDTH_PX = 816;
 const VISUAL_PAGE_MIN_HEIGHT_PX = 1056;
 const VISUAL_PAGE_PADDING_TOP_PX = 96;
@@ -210,7 +201,6 @@ export default function ScriptEditor() {
     markUnsynced,
   } = useScriptStore();
 
-  const [activeMenu, setActiveMenu] = useState<MenuName>(null);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
 
   const [showTitlePage, setShowTitlePage] = useState(false);
@@ -223,8 +213,7 @@ export default function ScriptEditor() {
   const [showExportSettings, setShowExportSettings] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
 
-  const [productionMode, setProductionMode] = useState(false);
-  const [revisionMode, setRevisionMode] = useState(false);
+  const [revisionMode] = useState(false);
   const [currentRevisionColor] = useState<RevisionColor>("blue");
 
   const [format, setFormat] = useState<FormatSettings>(defaultFormat);
@@ -278,9 +267,6 @@ export default function ScriptEditor() {
 
   const effectiveActiveBlockId = activeBlockId ?? blocks[0]?.id ?? null;
   const activeBlock = blocks.find((block) => block.id === effectiveActiveBlockId);
-  const activeIndex = blocks.findIndex(
-    (block) => block.id === effectiveActiveBlockId
-  );
 
   const scenes = useMemo(
     () =>
@@ -418,7 +404,7 @@ export default function ScriptEditor() {
   }, [showFormatTips]);
 
   function closeMenus() {
-    setActiveMenu(null);
+    // Legacy desktop menu was removed; keep this as a shared extension hook.
   }
 
   function fileBaseName() {
@@ -552,127 +538,6 @@ export default function ScriptEditor() {
     setDismissedSuggestionBlockId((current) => (current === id ? null : current));
   }
 
-  function updateBlockRevision(id: string, color: RevisionColor) {
-    setBlocks(
-      blocks.map((block) =>
-        block.id === id ? { ...block, revisionColor: color } : block
-      )
-    );
-    markUnsynced();
-  }
-
-  function toggleBlockLock(id: string) {
-    setBlocks(
-      blocks.map((block) =>
-        block.id === id ? { ...block, locked: !block.locked } : block
-      )
-    );
-    markUnsynced();
-  }
-
-  function insertBlock(type: ScriptBlock["type"], starterText = "") {
-    const defaultText =
-      type === "scene_heading" || type === "scene"
-        ? "INT. LOCATION - DAY"
-        : type === "transition"
-          ? "CUT TO:"
-          : type === "shot"
-            ? "ANGLE ON:"
-            : type === "parenthetical"
-              ? "(beat)"
-              : "";
-
-    const newBlock: ScriptBlock = {
-      id: crypto.randomUUID(),
-      type,
-      text: starterText || defaultText,
-      revisionColor: revisionMode ? currentRevisionColor : "none",
-      locked: false,
-      note: "",
-    };
-
-    const updated = [...blocks];
-    const insertIndex = activeIndex >= 0 ? activeIndex + 1 : blocks.length;
-
-    updated.splice(insertIndex, 0, newBlock);
-    setBlocks(updated);
-    focusBlockAfterRender(newBlock.id);
-    setActiveBlockId(newBlock.id);
-    markUnsynced();
-    closeMenus();
-  }
-
-  function deleteActiveBlock() {
-    if (activeIndex < 0 || blocks.length <= 1) return;
-    if (activeBlock?.locked) {
-      alert("This element is locked. Unlock it first.");
-      return;
-    }
-
-    const updated = blocks.filter((_, index) => index !== activeIndex);
-    const nextActiveId = updated[Math.max(0, activeIndex - 1)]?.id || null;
-    setBlocks(updated);
-    focusBlockAfterRender(nextActiveId);
-    setActiveBlockId(nextActiveId);
-    markUnsynced();
-    closeMenus();
-  }
-
-  function duplicateActiveBlock() {
-    if (!activeBlock || activeIndex < 0) return;
-
-    const duplicate: ScriptBlock = {
-      ...activeBlock,
-      id: crypto.randomUUID(),
-      locked: false,
-    };
-
-    const updated = [...blocks];
-    updated.splice(activeIndex + 1, 0, duplicate);
-
-    setBlocks(updated);
-    focusBlockAfterRender(duplicate.id);
-    setActiveBlockId(duplicate.id);
-    markUnsynced();
-    closeMenus();
-  }
-
-  function moveActiveBlock(direction: "up" | "down") {
-    if (activeIndex < 0) return;
-    if (activeBlock?.locked) {
-      alert("This element is locked. Unlock it first.");
-      return;
-    }
-
-    const targetIndex = direction === "up" ? activeIndex - 1 : activeIndex + 1;
-    if (targetIndex < 0 || targetIndex >= blocks.length) return;
-
-    const updated = [...blocks];
-    const [moved] = updated.splice(activeIndex, 1);
-    updated.splice(targetIndex, 0, moved);
-
-    setBlocks(updated);
-    markUnsynced();
-    closeMenus();
-  }
-
-  function applyRevisionToActive(color: RevisionColor) {
-    if (!activeBlock) return;
-    updateBlockRevision(activeBlock.id, color);
-    closeMenus();
-  }
-
-  function clearAllRevisions() {
-    setBlocks(
-      blocks.map((block) => ({
-        ...block,
-        revisionColor: "none",
-      }))
-    );
-    markUnsynced();
-    closeMenus();
-  }
-
   async function createNewScript() {
     if (!userId) {
       alert("You need to be logged in first.");
@@ -769,49 +634,8 @@ export default function ScriptEditor() {
     closeMenus();
   }
 
-  function formatCleanup() {
-    setBlocks(
-      blocks.map((block) => {
-        if (
-          isSceneHeadingType(block.type) ||
-          block.type === "character" ||
-          block.type === "transition" ||
-          block.type === "shot"
-        ) {
-          return { ...block, text: block.text.toUpperCase() };
-        }
-
-        return block;
-      })
-    );
-
-    markUnsynced();
-    closeMenus();
-  }
-
   function resetFormatDefaults() {
     setFormat(defaultFormat);
-  }
-
-  function clearScript() {
-    const confirmed = window.confirm(
-      "Clear this script? This replaces the current script with FADE IN."
-    );
-    if (!confirmed) return;
-
-    setBlocks([
-      {
-        id: crypto.randomUUID(),
-        type: "action",
-        text: "FADE IN:",
-        revisionColor: "none",
-        locked: false,
-        note: "",
-      },
-    ]);
-
-    markUnsynced();
-    closeMenus();
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>, index: number) {
@@ -1239,117 +1063,9 @@ export default function ScriptEditor() {
   return (
     <AppLayout contentClassName="px-0 py-0 sm:px-0 sm:py-0">
       <div
-        className="min-h-[calc(100vh-56px)] bg-zinc-200 text-zinc-950 font-sans"
-        onClick={() => setActiveMenu(null)}
+        className="min-h-[calc(100vh-56px)] bg-zinc-100 text-zinc-950 font-sans"
       >
-      <header className="sticky top-14 z-30 border-b border-zinc-300 bg-zinc-50 font-sans shadow-sm">
-        <div
-          className="hidden min-h-10 items-center gap-4 overflow-x-auto border-b border-zinc-200 px-3 text-xs font-sans sm:px-4"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <span className="shrink-0 font-bold tracking-wide">Script Studio</span>
-
-          <MenuButton label="File" menu="file" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
-          <MenuButton label="Edit" menu="edit" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
-          <MenuButton label="Insert" menu="insert" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
-          <MenuButton label="Tools" menu="tools" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
-          <MenuButton label="Production" menu="production" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
-          <MenuButton label="Help" menu="help" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
-
-          {activeMenu === "file" && (
-            <Dropdown left={64}>
-              <DropdownItem label="New Script" helper="Create a blank script" onClick={createNewScript} />
-              <DropdownItem label="Save Now" helper="Force cloud save" onClick={saveNow} />
-              <DropdownItem label="Title Page" helper="Edit title page metadata" onClick={() => setShowTitlePage(true)} />
-              <DropdownItem label="Back to Dashboard" helper="Return to script library" onClick={() => navigate("/dashboard")} />
-              <Divider />
-              <DropdownItem label="Export Settings" helper="All industry formats" onClick={() => setShowExportSettings(true)} />
-              <DropdownItem label="Export FDX" helper="Final Draft editable handoff" onClick={exportFdx} />
-              <DropdownItem label="Export Fountain" helper="Open screenplay format" onClick={exportFountain} />
-              <DropdownItem label="Export PDF" helper="Submission/reading copy" onClick={exportPdf} />
-              <DropdownItem label="Export RTF" helper="Word processor fallback" onClick={exportRtf} />
-              <DropdownItem label="Export TXT" helper="Plain text fallback" onClick={exportPlainText} />
-              <DropdownItem label="Print" helper="Open printable PDF" onClick={printScript} />
-            </Dropdown>
-          )}
-
-          {activeMenu === "edit" && (
-            <Dropdown left={112}>
-              <DropdownItem label="Duplicate Element" helper="Copy current block below" onClick={duplicateActiveBlock} />
-              <DropdownItem label="Delete Current Element" helper="Remove active block" onClick={deleteActiveBlock} />
-              <DropdownItem label="Move Element Up" helper="Reorder current block" onClick={() => moveActiveBlock("up")} />
-              <DropdownItem label="Move Element Down" helper="Reorder current block" onClick={() => moveActiveBlock("down")} />
-              <Divider />
-              <DropdownItem label="Lock / Unlock Element" helper="Protect current text from edits" onClick={() => activeBlock && toggleBlockLock(activeBlock.id)} />
-              <DropdownItem label="Format Cleanup" helper="Uppercase scene/character cues" onClick={formatCleanup} />
-              <DropdownItem label="Clear Script" helper="Reset current script" onClick={clearScript} />
-            </Dropdown>
-          )}
-
-          {activeMenu === "insert" && (
-            <Dropdown left={212}>
-              <DropdownItem label="Scene Heading" helper="INT./EXT. slugline" onClick={() => insertBlock("scene_heading")} />
-              <DropdownItem label="Action" helper="Description text" onClick={() => insertBlock("action")} />
-              <DropdownItem label="Character" helper="Speaker cue" onClick={() => insertBlock("character")} />
-              <DropdownItem label="Parenthetical" helper="Performance direction" onClick={() => insertBlock("parenthetical")} />
-              <DropdownItem label="Dialogue" helper="Spoken line" onClick={() => insertBlock("dialogue")} />
-              <DropdownItem label="General" helper="Plain text fallback block" onClick={() => insertBlock("general")} />
-              <Divider />
-              <DropdownItem label="Transition" helper="Adds CUT TO:" onClick={() => insertBlock("transition", "CUT TO:")} />
-              <DropdownItem label="Shot" helper="Adds ANGLE ON:" onClick={() => insertBlock("shot", "ANGLE ON:")} />
-            </Dropdown>
-          )}
-
-          {activeMenu === "tools" && (
-            <Dropdown left={270}>
-              <DropdownItem label="Format Settings" helper="Margins, spacing, scene numbers" onClick={() => setShowFormatSettings(true)} />
-              <DropdownItem
-                label="Analyze Script"
-                helper="Feedback tools are coming soon"
-                disabled
-                titleOverride="Analyze Script (Coming soon)"
-                onClick={() => undefined}
-              />
-              <DropdownItem label="Format Cleanup" helper="Fix common casing" onClick={formatCleanup} />
-              <DropdownItem
-                label="Smart Suggestions"
-                helper="Suggestion tools are coming soon"
-                disabled
-                titleOverride="Smart Suggestions (Coming soon)"
-                onClick={() => undefined}
-              />
-              <DropdownItem
-                label="Show Writing Stats"
-                helper="Stats panel is coming soon"
-                disabled
-                titleOverride="Writing Stats (Coming soon)"
-                onClick={() => undefined}
-              />
-              <DropdownItem label="Reset Format Defaults" helper="Industry baseline" onClick={resetFormatDefaults} />
-            </Dropdown>
-          )}
-
-          {activeMenu === "production" && (
-            <Dropdown left={328}>
-              <DropdownItem label={productionMode ? "Disable Production Mode" : "Enable Production Mode"} helper="Production label + future tools" onClick={() => setProductionMode(!productionMode)} />
-              <DropdownItem label={revisionMode ? "Disable Revision Mode" : "Enable Revision Mode"} helper="Color new edits" onClick={() => setRevisionMode(!revisionMode)} />
-              <DropdownItem label={format.showSceneNumbers ? "Hide Scene Numbers" : "Show Scene Numbers"} helper="Toggle left/right scene numbers" onClick={() => setFormat({ ...format, showSceneNumbers: !format.showSceneNumbers })} />
-              <Divider />
-              <DropdownItem label="Blue Revision" helper="Apply to active element" onClick={() => applyRevisionToActive("blue")} />
-              <DropdownItem label="Pink Revision" helper="Apply to active element" onClick={() => applyRevisionToActive("pink")} />
-              <DropdownItem label="Yellow Revision" helper="Apply to active element" onClick={() => applyRevisionToActive("yellow")} />
-              <DropdownItem label="Clear All Revision Colors" helper="Remove color tags" onClick={clearAllRevisions} />
-            </Dropdown>
-          )}
-
-          {activeMenu === "help" && (
-            <Dropdown left={420}>
-              <DropdownItem label="Keyboard Shortcuts" helper="Show controls" onClick={() => setShowShortcuts(true)} />
-              <DropdownItem label="About Script Studio" helper="App info" onClick={() => setShowAbout(true)} />
-            </Dropdown>
-          )}
-        </div>
-
+      <header className="sticky top-0 z-30 border-b border-zinc-200 bg-zinc-50/95 font-sans shadow-sm backdrop-blur">
         <ScriptToolbar
           activeElementType={activeBlock?.type || "action"}
           onChangeElementType={(type) => {
@@ -1360,11 +1076,8 @@ export default function ScriptEditor() {
           onBackToDashboard={() => navigate("/dashboard")}
           onNewScript={createNewScript}
           onSaveNow={saveNow}
-          onToggleTitlePage={() => setShowTitlePage((value) => !value)}
-          isTitlePageVisible={showTitlePage}
           onOpenExportSettings={() => setShowExportSettings(true)}
           onPrint={printScript}
-          onOpenFormatSettings={() => setShowFormatSettings(true)}
           showFormatTips={showFormatTips}
           onToggleFormatTips={() =>
             setShowFormatTips((currentValue) => !currentValue)
@@ -1372,17 +1085,29 @@ export default function ScriptEditor() {
         />
       </header>
 
-      <section className="border-b border-zinc-300 bg-zinc-100/80 px-4 py-5 text-center">
-        <p className="mx-auto max-w-[900px] truncate text-base font-semibold tracking-wide text-zinc-900">
-          {(title || "Untitled Script").toUpperCase()}
-        </p>
-        <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-          PageOne Script
-        </p>
+      <section className="border-b border-zinc-200 bg-zinc-50 px-4 py-4 text-center">
+        <div className="relative mx-auto flex w-full max-w-[960px] items-center justify-center">
+          <div>
+            <p className="mx-auto max-w-[900px] truncate text-sm font-semibold tracking-[0.08em] text-zinc-800">
+              {(title || "Untitled Script").toUpperCase()}
+            </p>
+            <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+              PageOne Script
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setShowTitlePage((value) => !value)}
+            className="absolute right-4 rounded border border-zinc-200 bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-600 transition hover:bg-zinc-100 sm:right-6"
+          >
+            {showTitlePage ? "Hide Title Page" : "Title Page"}
+          </button>
+        </div>
       </section>
 
       <div className="font-sans">
-        <main className="min-h-[calc(100vh-206px)] overflow-x-auto overflow-y-auto px-3 py-4 font-sans sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <main className="min-h-[calc(100vh-206px)] overflow-x-hidden overflow-y-auto px-3 py-4 font-sans sm:px-6 sm:py-6 lg:px-8 lg:py-8">
           <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 lg:flex-row lg:items-start lg:justify-center">
             <div className="flex min-w-0 flex-1 flex-col items-center gap-8">
               {showTitlePage && (
@@ -1595,85 +1320,6 @@ export default function ScriptEditor() {
       </div>
     </AppLayout>
   );
-}
-
-function MenuButton({
-  label,
-  menu,
-  activeMenu,
-  setActiveMenu,
-}: {
-  label: string;
-  menu: Exclude<MenuName, null>;
-  activeMenu: MenuName;
-  setActiveMenu: (menu: MenuName) => void;
-}) {
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation();
-        setActiveMenu(activeMenu === menu ? null : menu);
-      }}
-      className={`rounded px-2 py-1 font-sans transition ${
-        activeMenu === menu
-          ? "bg-white text-zinc-950 shadow-sm"
-          : "text-zinc-600 hover:bg-white/70 hover:text-zinc-950"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
-
-function Dropdown({ left, children }: { left: number; children: ReactNode }) {
-  return (
-    <div
-      className="absolute top-8 z-50 w-[min(16rem,calc(100vw-1rem))] rounded border border-zinc-200 bg-white py-1 font-sans text-xs text-zinc-900 shadow-xl"
-      style={{ left: `clamp(0.5rem, ${left}px, calc(100vw - 16.5rem))` }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      {children}
-    </div>
-  );
-}
-
-function DropdownItem({
-  label,
-  helper,
-  active = false,
-  disabled = false,
-  titleOverride,
-  onClick,
-}: {
-  label: string;
-  helper?: string;
-  active?: boolean;
-  disabled?: boolean;
-  titleOverride?: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={titleOverride ?? label}
-      className={`block w-full px-3 py-2 text-left font-sans transition ${
-        active
-          ? "bg-blue-50 text-blue-800"
-          : "hover:bg-zinc-50"
-      } ${
-        disabled ? "cursor-not-allowed text-zinc-400 hover:bg-transparent" : ""
-      }`}
-    >
-      <span className="block font-medium">{label}</span>
-      {helper && <span className="block text-[10px] text-zinc-500">{helper}</span>}
-    </button>
-  );
-}
-
-function Divider() {
-  return <div className="my-1 border-t border-zinc-200" />;
 }
 
 function NumberField({

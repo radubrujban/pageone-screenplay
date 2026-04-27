@@ -130,7 +130,7 @@ export default function ScriptPage() {
 
   if (offlineUnavailable) {
     return (
-      <AppLayout showSaveStatus>
+      <AppLayout>
         <div className="flex min-h-[60vh] items-center justify-center text-center">
           <p className="max-w-md text-sm leading-6 text-zinc-600">
             This script is not available offline yet. Reconnect once to cache it.

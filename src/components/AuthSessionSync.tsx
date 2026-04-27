@@ -109,7 +109,6 @@ export default function AuthSessionSync() {
     setAuthSession,
     setSaveStatus,
     syncForSessionUser,
-    syncUnsyncedScripts,
   ]);
 
   return null;
