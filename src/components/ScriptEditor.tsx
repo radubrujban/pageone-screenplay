@@ -681,17 +681,38 @@ export default function ScriptEditor() {
           ? `${dialogueColumnWidthPx}px`
           : "100%";
 
-    const blockMarginTop = isSceneHeading
-      ? "0.25in"
-      : isCharacter
-        ? "0.22in"
-        : isTransition || isShot
-          ? "0.2in"
-          : isAction
-            ? "0.04in"
-            : "0in";
+    const blockMarginTop =
+      isSceneHeading
+        ? "0.28in"
+        : isTransition
+          ? "0.24in"
+          : isShot
+            ? "0.16in"
+            : isCharacter
+              ? "0.2in"
+              : isParenthetical
+                ? "0.02in"
+                : isDialogue
+                  ? "0.01in"
+                  : isAction
+                    ? "0.03in"
+                    : "0in";
     const blockMarginBottom =
-      isDialogue || isParenthetical ? "0.12in" : isAction ? "0.04in" : "0in";
+      isSceneHeading
+        ? "0.1in"
+        : isTransition
+          ? "0.1in"
+          : isShot
+            ? "0.08in"
+            : isCharacter
+              ? "0.02in"
+              : isParenthetical
+                ? "0.03in"
+                : isDialogue
+                  ? "0.11in"
+                  : isAction
+                    ? "0.05in"
+                    : "0in";
     const blockTextAlign = isCharacter ? "center" : isTransition ? "right" : "left";
     const parentheticalOffsetPx = -12;
 
