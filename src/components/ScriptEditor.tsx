@@ -1114,7 +1114,7 @@ export default function ScriptEditor() {
           {viewMode === "page" ? (
             <div className="mx-auto w-full max-w-[960px]">
               <section
-                className="mx-auto w-full rounded-[2px] border border-zinc-300 bg-white text-black shadow-[0_4px_12px_rgba(15,23,42,0.08)]"
+                className="mx-auto w-full border border-zinc-300 bg-white text-black shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
                 style={{
                   width: `${VISUAL_PAGE_MAX_WIDTH_PX}px`,
                   minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
@@ -1127,16 +1127,16 @@ export default function ScriptEditor() {
                   lineHeight: format.lineHeight,
                 }}
               >
-                <div className="mb-8 text-center">
+                <div className="mb-7 border-b border-zinc-200 pb-4 text-center">
                   <input
                     value={title}
                     onChange={(e) => updateTitle(e.target.value)}
-                    className="mx-auto block w-full max-w-[480px] bg-transparent text-center text-[11px] uppercase tracking-[0.14em] text-zinc-500 outline-none"
+                    className="mx-auto block w-full max-w-[500px] bg-transparent text-center font-medium text-[11px] uppercase tracking-[0.18em] text-zinc-500 outline-none"
                     placeholder="UNTITLED SCRIPT"
                   />
                 </div>
 
-                <div className="mx-auto space-y-1" style={{ width: `${VISUAL_PAGE_CONTENT_WIDTH_PX}px` }}>
+                <div className="mx-auto" style={{ width: `${VISUAL_PAGE_CONTENT_WIDTH_PX}px` }}>
                   {blocks.map((block, index) => renderBlock(block, index))}
                 </div>
               </section>
