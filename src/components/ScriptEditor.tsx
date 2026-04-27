@@ -42,11 +42,12 @@ const VISUAL_PAGE_PADDING_TOP_PX = 96;
 const VISUAL_PAGE_PADDING_BOTTOM_PX = 96;
 const VISUAL_PAGE_PADDING_LEFT_PX = 144;
 const VISUAL_PAGE_PADDING_RIGHT_PX = 96;
-const VISUAL_PAGE_BLOCKS = 22;
 const VISUAL_PAGE_CONTENT_WIDTH_PX =
   VISUAL_PAGE_MAX_WIDTH_PX -
   VISUAL_PAGE_PADDING_LEFT_PX -
   VISUAL_PAGE_PADDING_RIGHT_PX;
+const VISUAL_PAGE_VERTICAL_PADDING_PX =
+  VISUAL_PAGE_PADDING_TOP_PX + VISUAL_PAGE_PADDING_BOTTOM_PX;
 
 type BlockSuggestionKind =
   | "scene_heading"
@@ -91,10 +92,11 @@ function downloadText(filename: string, content: string, type = "text/plain") {
 }
 
 function resizeTextarea(textarea: HTMLTextAreaElement | null) {
-  if (!textarea) return;
+  if (!textarea) return 0;
 
   textarea.style.height = "auto";
   textarea.style.height = `${textarea.scrollHeight}px`;
+  return textarea.scrollHeight;
 }
 
 function createEmptySceneHeadingBlock(): ScriptBlock {
@@ -137,6 +139,47 @@ function blockTypeLabel(type: ScriptBlock["type"]) {
   if (type === "transition") return "transition";
   if (type === "shot") return "shot";
   return type;
+}
+
+function getBlockVerticalSpacing(type: ScriptBlock["type"]) {
+  const marginTopIn = isSceneHeadingType(type)
+    ? 0.28
+    : type === "transition"
+      ? 0.24
+      : type === "shot"
+        ? 0.16
+        : type === "character"
+          ? 0.2
+          : type === "parenthetical"
+            ? 0.02
+            : type === "dialogue"
+              ? 0.01
+              : type === "action" || type === "general"
+                ? 0.03
+                : 0;
+
+  const marginBottomIn = isSceneHeadingType(type)
+    ? 0.1
+    : type === "transition"
+      ? 0.1
+      : type === "shot"
+        ? 0.08
+        : type === "character"
+          ? 0.02
+          : type === "parenthetical"
+            ? 0.03
+            : type === "dialogue"
+              ? 0.11
+              : type === "action" || type === "general"
+                ? 0.05
+                : 0;
+
+  return {
+    marginTopIn,
+    marginBottomIn,
+    marginTopPx: marginTopIn * INCH_PX,
+    marginBottomPx: marginBottomIn * INCH_PX,
+  };
 }
 
 function normalizeCharacterCue(value: string) {
@@ -417,6 +460,41 @@ export default function ScriptEditor() {
   const [dismissedSuggestionBlockId, setDismissedSuggestionBlockId] = useState<
     string | null
   >(null);
+  const [textareaHeightByBlock, setTextareaHeightByBlock] = useState<
+    Record<string, number>
+  >({});
+
+  const updateTextareaHeight = useCallback((blockId: string, height: number) => {
+    const roundedHeight = Math.max(0, Math.round(height));
+    setTextareaHeightByBlock((current) => {
+      if (current[blockId] === roundedHeight) return current;
+      return { ...current, [blockId]: roundedHeight };
+    });
+  }, []);
+
+  const remeasureVisibleTextareas = useCallback(() => {
+    setTextareaHeightByBlock((current) => {
+      let changed = false;
+      const next = { ...current };
+
+      textareaRefs.current.forEach((textarea, blockId) => {
+        const measuredHeight = Math.max(0, Math.round(resizeTextarea(textarea)));
+        if (next[blockId] !== measuredHeight) {
+          next[blockId] = measuredHeight;
+          changed = true;
+        }
+      });
+
+      Object.keys(next).forEach((blockId) => {
+        if (!textareaRefs.current.has(blockId)) {
+          delete next[blockId];
+          changed = true;
+        }
+      });
+
+      return changed ? next : current;
+    });
+  }, []);
 
   const blockHasVisibleSuggestions = useCallback(
     (blockId: string, textOverride?: string) => {
@@ -508,6 +586,34 @@ export default function ScriptEditor() {
 
   const effectiveActiveBlockId = activeBlockId ?? blocks[0]?.id ?? null;
   const activeBlock = blocks.find((block) => block.id === effectiveActiveBlockId);
+  const safePageHeightInches =
+    typeof format.pageHeight === "number" &&
+    Number.isFinite(format.pageHeight) &&
+    format.pageHeight > 0
+      ? format.pageHeight
+      : 11;
+  const safeFontSizePt =
+    typeof format.fontSize === "number" &&
+    Number.isFinite(format.fontSize) &&
+    format.fontSize > 0
+      ? format.fontSize
+      : 12;
+  const safeLineHeight =
+    typeof format.lineHeight === "number" &&
+    Number.isFinite(format.lineHeight) &&
+    format.lineHeight > 0
+      ? format.lineHeight
+      : 1.25;
+  const visualPageHeightPx = Math.max(
+    VISUAL_PAGE_MIN_HEIGHT_PX,
+    Math.round(safePageHeightInches * INCH_PX)
+  );
+  const visualPageContentHeightPx = Math.max(
+    1,
+    visualPageHeightPx - VISUAL_PAGE_VERTICAL_PADDING_PX
+  );
+  const fontSizePx = Math.max(12, safeFontSizePt) * (INCH_PX / 72);
+  const lineHeightPx = Math.max(1.2, safeLineHeight) * fontSizePx;
 
   const scenes = useMemo(
     () =>
@@ -550,22 +656,87 @@ export default function ScriptEditor() {
     [blocks, title, resolvedTitlePage, resolvedExportSettings]
   );
 
+  const getBlockVisualHeightPx = useCallback(
+    (block: ScriptBlock) => {
+      const spacing = getBlockVerticalSpacing(block.type);
+      const measuredTextareaHeight = textareaHeightByBlock[block.id];
+      const fallbackContentHeight = Math.max(lineHeightPx, 18);
+      const contentHeight =
+        typeof measuredTextareaHeight === "number" && measuredTextareaHeight > 0
+          ? measuredTextareaHeight
+          : fallbackContentHeight;
+      return contentHeight + spacing.marginTopPx + spacing.marginBottomPx;
+    },
+    [lineHeightPx, textareaHeightByBlock]
+  );
+
   const visualPageBlockIndices = useMemo(() => {
-    const pages: number[][] = [[]];
+    try {
+      const pages: number[][] = [];
+      let currentPage: number[] = [];
+      let currentPageHeight = 0;
 
-    blocks.forEach((_, index) => {
-      const currentPage = pages[pages.length - 1];
+      blocks.forEach((block, index) => {
+        const blockHeight = getBlockVisualHeightPx(block);
+        const safeBlockHeight =
+          Number.isFinite(blockHeight) && blockHeight > 0 ? blockHeight : lineHeightPx;
+        const exceedsCurrentPage =
+          currentPage.length > 0 &&
+          currentPageHeight + safeBlockHeight > visualPageContentHeightPx;
 
-      if (currentPage.length >= VISUAL_PAGE_BLOCKS) {
-        pages.push([index]);
-        return;
+        if (exceedsCurrentPage) {
+          pages.push(currentPage);
+          currentPage = [index];
+          currentPageHeight = safeBlockHeight;
+          return;
+        }
+
+        currentPage.push(index);
+        currentPageHeight += safeBlockHeight;
+      });
+
+      if (currentPage.length > 0) {
+        pages.push(currentPage);
       }
 
-      currentPage.push(index);
-    });
+      const hasRenderableBlocks = pages.some((page) => page.length > 0);
+      if (blocks.length > 0 && !hasRenderableBlocks) {
+        return [blocks.map((_, index) => index)];
+      }
 
-    return pages;
-  }, [blocks]);
+      return pages.length > 0 ? pages : [[]];
+    } catch (error) {
+      console.error("Pagination fallback triggered", error);
+      return blocks.length > 0 ? [blocks.map((_, index) => index)] : [[]];
+    }
+  }, [blocks, getBlockVisualHeightPx, lineHeightPx, visualPageContentHeightPx]);
+
+  useLayoutEffect(() => {
+    remeasureVisibleTextareas();
+  }, [
+    blocks,
+    format.fontSize,
+    format.lineHeight,
+    format.characterIndent,
+    format.dialogueIndent,
+    format.dialogueWidth,
+    remeasureVisibleTextareas,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleResize = () => {
+      window.requestAnimationFrame(() => {
+        remeasureVisibleTextareas();
+      });
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
+  }, [remeasureVisibleTextareas]);
 
   useEffect(() => {
     if (blocks.length > 0) return;
@@ -594,10 +765,11 @@ export default function ScriptEditor() {
       pendingScrollTop.current = null;
     }
 
-    resizeTextarea(textarea);
+    const measuredHeight = resizeTextarea(textarea);
+    updateTextareaHeight(blockId, measuredHeight);
     focusTextareaAtPosition(textarea, textarea.value.length, { blockId });
     pendingFocusBlockId.current = null;
-  }, [blocks, activeBlockId, focusTextareaAtPosition]);
+  }, [blocks, activeBlockId, focusTextareaAtPosition, updateTextareaHeight]);
 
   useLayoutEffect(() => {
     const pending = pendingCursorPosition.current;
@@ -1208,8 +1380,6 @@ export default function ScriptEditor() {
       block.revisionColor !== "none";
     const isSceneHeading = isSceneHeadingType(block.type);
     const isCharacter = block.type === "character";
-    const isAction = block.type === "action";
-    const isGeneral = block.type === "general";
     const isParenthetical = block.type === "parenthetical";
     const isDialogue = block.type === "dialogue";
     const isTransition = block.type === "transition";
@@ -1233,6 +1403,7 @@ export default function ScriptEditor() {
     const dialogueWidthPx = Math.min(contentWidthPx - dialogueIndentPx, format.dialogueWidth * INCH_PX);
     const parentheticalIndentPx = Math.max(0, (3 - format.leftMargin) * INCH_PX);
     const parentheticalWidthPx = Math.min(contentWidthPx - parentheticalIndentPx, 2.5 * INCH_PX);
+    const blockSpacing = getBlockVerticalSpacing(block.type);
 
     const blockWidth = isCharacter
       ? `${characterWidthPx}px`
@@ -1241,39 +1412,6 @@ export default function ScriptEditor() {
         : isDialogue
           ? `${dialogueWidthPx}px`
           : `${actionWidthPx}px`;
-
-    const blockMarginTop =
-      isSceneHeading
-        ? "0.28in"
-        : isTransition
-          ? "0.24in"
-          : isShot
-            ? "0.16in"
-            : isCharacter
-              ? "0.2in"
-              : isParenthetical
-                ? "0.02in"
-                : isDialogue
-                  ? "0.01in"
-                  : isAction || isGeneral
-                    ? "0.03in"
-                    : "0in";
-    const blockMarginBottom =
-      isSceneHeading
-        ? "0.1in"
-        : isTransition
-          ? "0.1in"
-          : isShot
-            ? "0.08in"
-            : isCharacter
-              ? "0.02in"
-              : isParenthetical
-                ? "0.03in"
-                : isDialogue
-                  ? "0.11in"
-                  : isAction || isGeneral
-                  ? "0.05in"
-                    : "0in";
     const blockTextAlign = isTransition ? "right" : "left";
     const suggestions =
       isActiveBlock && dismissedSuggestionBlockId !== block.id
@@ -1306,7 +1444,8 @@ export default function ScriptEditor() {
           }
         }}
         onChange={(e) => {
-          resizeTextarea(e.currentTarget);
+          const measuredHeight = resizeTextarea(e.currentTarget);
+          updateTextareaHeight(block.id, measuredHeight);
           updateBlock(block.id, e.target.value);
 
           if (typewriterMode && !blockHasVisibleSuggestions(block.id, e.target.value)) {
@@ -1320,8 +1459,8 @@ export default function ScriptEditor() {
         className="resize-none overflow-hidden rounded-sm bg-transparent outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-zinc-400/60 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-80"
         style={{
           width: blockWidth,
-          marginTop: blockMarginTop,
-          marginBottom: blockMarginBottom,
+          marginTop: `${blockSpacing.marginTopIn}in`,
+          marginBottom: `${blockSpacing.marginBottomIn}in`,
           marginLeft: isCharacter
             ? `${characterIndentPx}px`
             : isParenthetical
@@ -1336,8 +1475,8 @@ export default function ScriptEditor() {
           textAlign: blockTextAlign,
           textTransform: isUppercase ? "uppercase" : "none",
           fontFamily: '"Courier Prime", Courier, monospace',
-          fontSize: `${Math.max(12, format.fontSize)}pt`,
-          lineHeight: Math.max(1.2, format.lineHeight),
+          fontSize: `${Math.max(12, safeFontSizePt)}pt`,
+          lineHeight: Math.max(1.2, safeLineHeight),
           background: showRevisionBackground
             ? revisionBackground(block.revisionColor)
             : elementBackground(block.type, isActiveBlock),
@@ -1505,7 +1644,7 @@ export default function ScriptEditor() {
                   className="w-full border border-zinc-300/90 bg-white text-black shadow-[0_1px_4px_rgba(15,23,42,0.05)]"
                   style={{
                     width: `min(${VISUAL_PAGE_MAX_WIDTH_PX}px, calc(100vw - 2.5rem))`,
-                    minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
+                    height: `${visualPageHeightPx}px`,
                     paddingTop: `${VISUAL_PAGE_PADDING_TOP_PX}px`,
                     paddingBottom: `${VISUAL_PAGE_PADDING_BOTTOM_PX}px`,
                     paddingLeft: `${VISUAL_PAGE_PADDING_LEFT_PX}px`,
@@ -1517,11 +1656,7 @@ export default function ScriptEditor() {
                   <div
                     className="mx-auto flex w-full flex-col"
                     style={{
-                      minHeight: `${
-                        VISUAL_PAGE_MIN_HEIGHT_PX -
-                        VISUAL_PAGE_PADDING_TOP_PX -
-                        VISUAL_PAGE_PADDING_BOTTOM_PX
-                      }px`,
+                      height: `${visualPageContentHeightPx}px`,
                     }}
                   >
                     <div className="mx-auto mt-24 w-full max-w-[560px] text-center">
@@ -1588,23 +1723,17 @@ export default function ScriptEditor() {
                   className="w-full border border-zinc-300/90 bg-white text-black shadow-[0_1px_4px_rgba(15,23,42,0.05)]"
                   style={{
                     width: `min(${VISUAL_PAGE_MAX_WIDTH_PX}px, calc(100vw - 2.5rem))`,
-                    minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
+                    height: `${visualPageHeightPx}px`,
                     paddingTop: `${VISUAL_PAGE_PADDING_TOP_PX}px`,
                     paddingBottom: `${VISUAL_PAGE_PADDING_BOTTOM_PX}px`,
                     paddingLeft: `${VISUAL_PAGE_PADDING_LEFT_PX}px`,
                     paddingRight: `${VISUAL_PAGE_PADDING_RIGHT_PX}px`,
                     boxSizing: "border-box",
                     fontFamily: '"Courier Prime", Courier, monospace',
-                    fontSize: `${Math.max(12, format.fontSize)}pt`,
-                    lineHeight: Math.max(1.2, format.lineHeight),
+                    fontSize: `${Math.max(12, safeFontSizePt)}pt`,
+                    lineHeight: Math.max(1.2, safeLineHeight),
                   }}
                 >
-                  {pageIndex > 0 && (
-                    <div className="mb-6 border-b border-zinc-200 pb-3 text-right text-[10px] uppercase tracking-[0.14em] text-zinc-400">
-                      Page {pageIndex + 1}
-                    </div>
-                  )}
-
                   <div
                     className="mx-auto"
                     style={{ width: `${VISUAL_PAGE_CONTENT_WIDTH_PX}px` }}
