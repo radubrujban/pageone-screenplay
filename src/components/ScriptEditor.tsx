@@ -143,6 +143,71 @@ function normalizeCharacterCue(value: string) {
   return value.trim().replace(/\s+/g, " ").toUpperCase();
 }
 
+function hasStrongSuggestionPrefixMatch(
+  kind: BlockSuggestionKind,
+  typedText: string,
+  suggestion: string
+) {
+  if (kind === "scene_heading_suffix") {
+    const suffixFragmentMatch = typedText.match(/\s-\s?([A-Za-z]*)$/);
+    const suffixFragment = suffixFragmentMatch?.[1]?.toUpperCase() ?? "";
+    if (suffixFragment.length < 1) return false;
+
+    const suggestionSuffix = suggestion.replace(/^\s*-\s*/, "").toUpperCase();
+    return (
+      suggestionSuffix.startsWith(suffixFragment) &&
+      suggestionSuffix !== suffixFragment
+    );
+  }
+
+  const normalizedTyped = normalizeCharacterCue(typedText);
+  const normalizedSuggestion = normalizeCharacterCue(suggestion);
+  return (
+    normalizedTyped.length >= 1 &&
+    normalizedSuggestion.startsWith(normalizedTyped) &&
+    normalizedSuggestion !== normalizedTyped
+  );
+}
+
+function isExactKnownSuggestion(
+  kind: BlockSuggestionKind,
+  typedText: string,
+  allBlocks: ScriptBlock[]
+) {
+  const normalizedTyped = normalizeCharacterCue(typedText);
+  if (!normalizedTyped) return false;
+
+  if (kind === "character") {
+    return allBlocks.some(
+      (candidate) =>
+        candidate.type === "character" &&
+        normalizeCharacterCue(candidate.text) === normalizedTyped
+    );
+  }
+
+  if (kind === "scene_heading") {
+    return sceneHeadingSuggestions.some(
+      (suggestion) => normalizeCharacterCue(suggestion) === normalizedTyped
+    );
+  }
+
+  if (kind === "transition") {
+    return transitionSuggestions.some(
+      (suggestion) => normalizeCharacterCue(suggestion) === normalizedTyped
+    );
+  }
+
+  if (kind === "shot") {
+    return shotSuggestions.some(
+      (suggestion) => normalizeCharacterCue(suggestion) === normalizedTyped
+    );
+  }
+
+  return SCENE_TIME_SUFFIXES.some((suffix) =>
+    normalizeCharacterCue(typedText).endsWith(normalizeCharacterCue(suffix))
+  );
+}
+
 function getBlockSuggestions(
   block: ScriptBlock,
   allBlocks: ScriptBlock[]
@@ -894,7 +959,18 @@ export default function ScriptEditor() {
         return false;
       }
 
-      let suggestionIndex = clampedSuggestionIndex;
+      const defaultSuggestionIndex = hasSuggestionIntent ? clampedSuggestionIndex : 0;
+      let suggestionIndex = defaultSuggestionIndex;
+      const selectedSuggestion = activeSuggestions.options[defaultSuggestionIndex];
+      if (!selectedSuggestion) {
+        return false;
+      }
+
+      const canAcceptOnTab = hasStrongSuggestionPrefixMatch(
+        activeSuggestions.kind,
+        current.text,
+        selectedSuggestion
+      ) && !isExactKnownSuggestion(activeSuggestions.kind, current.text, blocks);
 
       if (activeSuggestions.kind === "character") {
         const normalizedQuery = normalizeCharacterCue(current.text);
@@ -906,7 +982,15 @@ export default function ScriptEditor() {
         const shouldAcceptCharacterSuggestion =
           hasSuggestionIntent || hasStrongPrefixMatch;
 
-        if (!shouldAcceptCharacterSuggestion) {
+        if (trigger === "tab" && !canAcceptOnTab) {
+          setSuggestionIntentByBlock((state) => ({
+            ...state,
+            [current.id]: false,
+          }));
+          return false;
+        }
+
+        if (trigger === "enter" && !shouldAcceptCharacterSuggestion) {
           if (trigger === "enter") {
             setDismissedSuggestionBlockId(current.id);
           }
@@ -920,6 +1004,12 @@ export default function ScriptEditor() {
         if (!hasSuggestionIntent) {
           suggestionIndex = 0;
         }
+      } else if (trigger === "tab" && !canAcceptOnTab) {
+        setSuggestionIntentByBlock((state) => ({
+          ...state,
+          [current.id]: false,
+        }));
+        return false;
       }
 
       applySuggestionToBlock(
