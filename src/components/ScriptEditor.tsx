@@ -1078,6 +1078,8 @@ export default function ScriptEditor() {
           onBackToDashboard={() => navigate("/dashboard")}
           onNewScript={createNewScript}
           onSaveNow={saveNow}
+          isTitlePageVisible={showTitlePage}
+          onToggleTitlePage={() => setShowTitlePage((value) => !value)}
           onOpenExportSettings={() => setShowExportSettings(true)}
           onPrint={printScript}
           showFormatTips={showFormatTips}
@@ -1088,7 +1090,7 @@ export default function ScriptEditor() {
       </header>
 
       <section className="border-b border-zinc-200/90 bg-zinc-50/85 px-4 py-5 text-center">
-        <div className="relative mx-auto flex w-full max-w-[960px] items-center justify-center">
+        <div className="mx-auto flex w-full max-w-[960px] items-center justify-center">
           <div>
             <p className="mx-auto max-w-[900px] truncate text-sm font-semibold tracking-[0.1em] text-zinc-700">
               {(title || "Untitled Script").toUpperCase()}
@@ -1097,14 +1099,6 @@ export default function ScriptEditor() {
               PageOne Script
             </p>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setShowTitlePage((value) => !value)}
-            className="absolute right-4 rounded border border-zinc-200/90 bg-white/95 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-50 sm:right-6"
-          >
-            {showTitlePage ? "Hide Title Page" : "Title Page"}
-          </button>
         </div>
       </section>
 
@@ -1136,15 +1130,15 @@ export default function ScriptEditor() {
                       }px`,
                     }}
                   >
-                    <div className="mx-auto mt-20 w-full max-w-[540px] text-center">
+                    <div className="mx-auto mt-24 w-full max-w-[560px] text-center">
                       <input
                         value={resolvedTitlePage.title}
                         onChange={(e) => updateTitle(e.target.value)}
-                        className="w-full bg-transparent text-center text-[22px] font-semibold uppercase tracking-[0.08em] outline-none placeholder:text-zinc-300"
+                        className="w-full cursor-text appearance-none border-0 bg-transparent text-center text-[24px] font-semibold uppercase tracking-[0.1em] text-zinc-900 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50"
                         placeholder="UNTITLED SCRIPT"
                       />
 
-                      <p className="mt-16 text-[13px] uppercase tracking-[0.18em] text-zinc-500">
+                      <p className="mt-20 text-[13px] uppercase tracking-[0.18em] text-zinc-500">
                         Written by
                       </p>
 
@@ -1153,7 +1147,7 @@ export default function ScriptEditor() {
                         onChange={(e) =>
                           updateTitlePageField("writtenBy", e.target.value)
                         }
-                        className="mx-auto mt-3 w-full max-w-[380px] bg-transparent text-center text-[17px] outline-none placeholder:text-zinc-300"
+                        className="mx-auto mt-4 w-full max-w-[400px] cursor-text appearance-none border-0 bg-transparent text-center text-[17px] text-zinc-900 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50"
                         placeholder="Author Name"
                       />
 
@@ -1162,36 +1156,30 @@ export default function ScriptEditor() {
                         onChange={(e) =>
                           updateTitlePageField("basedOn", e.target.value)
                         }
-                        className="mx-auto mt-7 w-full max-w-[420px] bg-transparent text-center text-[12px] italic text-zinc-700 outline-none placeholder:text-zinc-300"
-                        placeholder="Based on..."
+                        className="mx-auto mt-8 w-full max-w-[430px] cursor-text appearance-none border-0 bg-transparent text-center text-[12px] italic text-zinc-700 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50"
+                        placeholder="Based on (optional)"
                       />
                     </div>
 
-                    <div className="mt-auto grid grid-cols-1 gap-6 pt-16 text-[12px] sm:grid-cols-2">
+                    <div className="mt-auto grid grid-cols-1 gap-8 pt-20 text-[12px] sm:grid-cols-2">
                       <div className="text-left">
-                        <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
-                          Contact
-                        </p>
                         <textarea
                           value={titlePage.contact}
                           onChange={(e) =>
                             updateTitlePageField("contact", e.target.value)
                           }
-                          className="h-28 w-full resize-none bg-transparent leading-relaxed outline-none placeholder:text-zinc-300"
+                          className="h-28 w-full resize-none cursor-text appearance-none border-0 bg-transparent leading-relaxed text-zinc-800 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50"
                           placeholder="contact@email.com&#10;+1 (555) 555-5555"
                         />
                       </div>
 
                       <div className="text-left sm:text-right">
-                        <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
-                          Draft Date
-                        </p>
                         <input
                           value={titlePage.draftDate}
                           onChange={(e) =>
                             updateTitlePageField("draftDate", e.target.value)
                           }
-                          className="w-full bg-transparent text-left outline-none placeholder:text-zinc-300 sm:text-right"
+                          className="w-full cursor-text appearance-none border-0 bg-transparent text-left text-zinc-800 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50 sm:text-right"
                           placeholder="Draft date"
                         />
                       </div>

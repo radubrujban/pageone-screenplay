@@ -2,6 +2,7 @@ import {
   ArrowLeft,
   Download,
   FilePlus2,
+  FileText,
   Lightbulb,
   Printer,
   Save,
@@ -16,6 +17,8 @@ type ScriptToolbarProps = {
   onBackToDashboard: () => void;
   onNewScript: () => void;
   onSaveNow: () => void;
+  isTitlePageVisible: boolean;
+  onToggleTitlePage: () => void;
   onOpenExportSettings: () => void;
   onPrint: () => void;
   showFormatTips: boolean;
@@ -68,6 +71,8 @@ export default function ScriptToolbar({
   onBackToDashboard,
   onNewScript,
   onSaveNow,
+  isTitlePageVisible,
+  onToggleTitlePage,
   onOpenExportSettings,
   onPrint,
   showFormatTips,
@@ -118,6 +123,12 @@ export default function ScriptToolbar({
             <option value="shot">Shot</option>
             <option value="general">General</option>
           </select>
+          <ToolbarButton
+            label="Title Page"
+            icon={FileText}
+            onClick={onToggleTitlePage}
+            active={isTitlePageVisible}
+          />
           <ToolbarButton
             label="Tips"
             icon={Lightbulb}
