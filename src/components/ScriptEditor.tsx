@@ -160,11 +160,36 @@ function getBlockSuggestions(block: ScriptBlock): BlockSuggestionState | null {
   return null;
 }
 
-function applySceneHeadingPrefix(text: string, suggestion: string) {
-  const remainder = text
-    .replace(/^\s*(INT\.\/EXT\.|EXT\.\/INT\.|INT\.|EXT\.)\s*/i, "")
-    .trim();
-  return remainder ? `${suggestion} ${remainder}` : `${suggestion} `;
+function replaceLeadingQuery(text: string, suggestion: string) {
+  const trimmedStart = text.replace(/^\s+/, "");
+  const leadingWhitespace = text.match(/^\s*/)?.[0] ?? "";
+  const parts = trimmedStart.split(/\s+/);
+  const firstToken = parts[0] ?? "";
+  let remainder = trimmedStart.slice(firstToken.length).trimStart();
+
+  const suggestionWords = suggestion
+    .toUpperCase()
+    .replace(/[.:]/g, "")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  while (remainder.length > 0) {
+    const remainderParts = remainder.split(/\s+/);
+    const remainderFirst = (remainderParts[0] ?? "")
+      .toUpperCase()
+      .replace(/[.:]/g, "");
+    if (!remainderFirst || !suggestionWords.includes(remainderFirst)) break;
+    remainder = remainder.slice((remainderParts[0] ?? "").length).trimStart();
+  }
+
+  const hasRemainder = remainder.length > 0;
+  const nextText = `${leadingWhitespace}${suggestion}${
+    hasRemainder ? ` ${remainder}` : ""
+  }`;
+  const cursorPosition =
+    `${leadingWhitespace}${suggestion}`.length + (hasRemainder ? 1 : 0);
+
+  return { text: nextText, cursorPosition };
 }
 
 export default function ScriptEditor() {
@@ -209,6 +234,15 @@ export default function ScriptEditor() {
   const isSaving = useRef(false);
   const textareaRefs = useRef(new Map<string, HTMLTextAreaElement>());
   const pendingFocusBlockId = useRef<string | null>(null);
+  const pendingCursorPosition = useRef<{ id: string; position: number } | null>(
+    null
+  );
+  const [suggestionHighlightByBlock, setSuggestionHighlightByBlock] = useState<
+    Record<string, number>
+  >({});
+  const [dismissedSuggestionBlockId, setDismissedSuggestionBlockId] = useState<
+    string | null
+  >(null);
 
   const effectiveActiveBlockId = activeBlockId ?? blocks[0]?.id ?? null;
   const activeBlock = blocks.find((block) => block.id === effectiveActiveBlockId);
@@ -285,6 +319,18 @@ export default function ScriptEditor() {
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
     resizeTextarea(textarea);
     pendingFocusBlockId.current = null;
+  }, [blocks, activeBlockId]);
+
+  useLayoutEffect(() => {
+    const pending = pendingCursorPosition.current;
+    if (!pending) return;
+
+    const textarea = textareaRefs.current.get(pending.id);
+    if (!textarea) return;
+
+    textarea.focus();
+    textarea.setSelectionRange(pending.position, pending.position);
+    pendingCursorPosition.current = null;
   }, [blocks, activeBlockId]);
 
   function registerTextarea(id: string, textarea: HTMLTextAreaElement | null) {
@@ -367,6 +413,7 @@ export default function ScriptEditor() {
     );
 
     markUnsynced();
+    setDismissedSuggestionBlockId((current) => (current === id ? null : current));
   }
 
   function applySuggestionToBlock(
@@ -374,33 +421,49 @@ export default function ScriptEditor() {
     suggestion: string,
     kind: BlockSuggestionKind
   ) {
+    let nextText = suggestion;
+    let cursorPosition = suggestion.length;
+
     setBlocks(
       blocks.map((block) => {
         if (block.id !== id) return block;
 
         if (kind === "scene_heading") {
+          const applied = replaceLeadingQuery(block.text, suggestion);
+          nextText = applied.text;
+          cursorPosition = applied.cursorPosition;
           return {
             ...block,
             type: "scene_heading",
-            text: applySceneHeadingPrefix(block.text, suggestion),
+            text: nextText,
           };
         }
 
         if (kind === "transition") {
+          const applied = replaceLeadingQuery(block.text, suggestion);
+          nextText = applied.text;
+          cursorPosition = applied.cursorPosition;
           return {
             ...block,
             type: "transition",
-            text: suggestion,
+            text: nextText,
           };
         }
 
+        const applied = replaceLeadingQuery(block.text, suggestion);
+        nextText = applied.text;
+        cursorPosition = applied.cursorPosition;
         return {
           ...block,
           type: "shot",
-          text: suggestion,
+          text: nextText,
         };
       })
     );
+    pendingCursorPosition.current = { id, position: cursorPosition };
+    setActiveBlockId(id);
+    setSuggestionHighlightByBlock((state) => ({ ...state, [id]: 0 }));
+    setDismissedSuggestionBlockId(null);
     markUnsynced();
   }
 
@@ -420,6 +483,7 @@ export default function ScriptEditor() {
       )
     );
     markUnsynced();
+    setDismissedSuggestionBlockId((current) => (current === id ? null : current));
   }
 
   function updateBlockRevision(id: string, color: RevisionColor) {
@@ -686,6 +750,34 @@ export default function ScriptEditor() {
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>, index: number) {
     const current = blocks[index];
+    const activeSuggestions =
+      dismissedSuggestionBlockId === current.id
+        ? null
+        : getBlockSuggestions(current);
+    const highlightedIndex =
+      suggestionHighlightByBlock[current.id] !== undefined
+        ? suggestionHighlightByBlock[current.id]
+        : 0;
+    const clampedSuggestionIndex =
+      activeSuggestions && activeSuggestions.options.length > 0
+        ? Math.max(
+            0,
+            Math.min(highlightedIndex, activeSuggestions.options.length - 1)
+          )
+        : 0;
+
+    const acceptActiveSuggestion = () => {
+      if (!activeSuggestions || activeSuggestions.options.length === 0) {
+        return false;
+      }
+
+      applySuggestionToBlock(
+        current.id,
+        activeSuggestions.options[clampedSuggestionIndex],
+        activeSuggestions.kind
+      );
+      return true;
+    };
 
     if (current.locked) {
       if (e.key.length === 1 || e.key === "Enter" || e.key === "Backspace") {
@@ -694,26 +786,60 @@ export default function ScriptEditor() {
       return;
     }
 
+    if (activeSuggestions && activeSuggestions.options.length > 0) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setDismissedSuggestionBlockId(current.id);
+        return;
+      }
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSuggestionHighlightByBlock((state) => ({
+          ...state,
+          [current.id]:
+            (clampedSuggestionIndex + 1) % activeSuggestions.options.length,
+        }));
+        return;
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSuggestionHighlightByBlock((state) => ({
+          ...state,
+          [current.id]:
+            (clampedSuggestionIndex - 1 + activeSuggestions.options.length) %
+            activeSuggestions.options.length,
+        }));
+        return;
+      }
+    }
+
     if (e.key === "Tab") {
       e.preventDefault();
+
+      if (acceptActiveSuggestion()) return;
 
       const nextType = e.shiftKey
         ? getPreviousType(current.type)
         : getNextType(current.type);
 
+      pendingCursorPosition.current = {
+        id: current.id,
+        position: e.currentTarget.selectionStart ?? current.text.length,
+      };
       updateBlockType(current.id, nextType);
+      setActiveBlockId(current.id);
       return;
     }
 
     if (e.key === "Enter") {
-      const suggestions = getBlockSuggestions(current);
-      if (suggestions && suggestions.options.length > 0 && current.text.trim()) {
+      if (e.shiftKey) {
+        return;
+      }
+
+      if (acceptActiveSuggestion()) {
         e.preventDefault();
-        applySuggestionToBlock(
-          current.id,
-          suggestions.options[0],
-          suggestions.kind
-        );
         return;
       }
 
@@ -735,6 +861,7 @@ export default function ScriptEditor() {
       setBlocks(updated);
       focusBlockAfterRender(newBlock.id);
       setActiveBlockId(newBlock.id);
+      setDismissedSuggestionBlockId(null);
       markUnsynced();
       return;
     }
@@ -818,7 +945,14 @@ export default function ScriptEditor() {
                     : "0in";
     const blockTextAlign = isCharacter ? "center" : isTransition ? "right" : "left";
     const parentheticalOffsetPx = -12;
-    const suggestions = isActiveBlock ? getBlockSuggestions(block) : null;
+    const suggestions =
+      isActiveBlock && dismissedSuggestionBlockId !== block.id
+        ? getBlockSuggestions(block)
+        : null;
+    const highlightedIndex =
+      suggestionHighlightByBlock[block.id] !== undefined
+        ? suggestionHighlightByBlock[block.id]
+        : 0;
 
     const textareaElement = (
       <div className="relative">
@@ -827,7 +961,10 @@ export default function ScriptEditor() {
           disabled={block.locked}
           spellCheck
           ref={(textarea) => registerTextarea(block.id, textarea)}
-        onFocus={() => setActiveBlockId(block.id)}
+        onFocus={() => {
+          setActiveBlockId(block.id);
+          setDismissedSuggestionBlockId(null);
+        }}
         onChange={(e) => {
           resizeTextarea(e.currentTarget);
           updateBlock(block.id, e.target.value);
@@ -877,15 +1014,25 @@ export default function ScriptEditor() {
       />
         {suggestions && suggestions.options.length > 0 && (
           <div className="absolute left-0 top-full z-30 mt-1 w-52 rounded-md border border-zinc-200 bg-white p-1 shadow-lg">
-            {suggestions.options.map((suggestion) => (
+            {suggestions.options.map((suggestion, suggestionIndex) => (
               <button
                 key={`${block.id}-${suggestion}`}
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
+                onMouseEnter={() =>
+                  setSuggestionHighlightByBlock((state) => ({
+                    ...state,
+                    [block.id]: suggestionIndex,
+                  }))
+                }
                 onClick={() =>
                   applySuggestionToBlock(block.id, suggestion, suggestions.kind)
                 }
-                className="block w-full rounded px-2 py-1.5 text-left text-xs text-zinc-700 hover:bg-zinc-100"
+                className={`block w-full rounded px-2 py-1.5 text-left text-xs text-zinc-700 ${
+                  suggestionIndex === highlightedIndex
+                    ? "bg-zinc-100"
+                    : "hover:bg-zinc-100"
+                }`}
               >
                 {suggestion}
               </button>
