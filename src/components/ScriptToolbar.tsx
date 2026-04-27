@@ -6,6 +6,7 @@ import {
   Lightbulb,
   Printer,
   Save,
+  Type,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import SaveStatus from "./SaveStatus";
@@ -19,6 +20,8 @@ type ScriptToolbarProps = {
   onSaveNow: () => void;
   isTitlePageVisible: boolean;
   onToggleTitlePage: () => void;
+  isTypewriterMode: boolean;
+  onToggleTypewriterMode: () => void;
   onOpenExportSettings: () => void;
   onPrint: () => void;
   showFormatTips: boolean;
@@ -73,6 +76,8 @@ export default function ScriptToolbar({
   onSaveNow,
   isTitlePageVisible,
   onToggleTitlePage,
+  isTypewriterMode,
+  onToggleTypewriterMode,
   onOpenExportSettings,
   onPrint,
   showFormatTips,
@@ -128,6 +133,12 @@ export default function ScriptToolbar({
             icon={FileText}
             onClick={onToggleTitlePage}
             active={isTitlePageVisible}
+          />
+          <ToolbarButton
+            label="Typewriter"
+            icon={Type}
+            onClick={onToggleTypewriterMode}
+            active={isTypewriterMode}
           />
           <ToolbarButton
             label="Tips"

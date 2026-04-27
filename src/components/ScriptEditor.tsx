@@ -48,7 +48,7 @@ const VISUAL_PAGE_CONTENT_WIDTH_PX =
   VISUAL_PAGE_PADDING_LEFT_PX -
   VISUAL_PAGE_PADDING_RIGHT_PX;
 
-type BlockSuggestionKind = "scene_heading" | "transition" | "shot";
+type BlockSuggestionKind = "scene_heading" | "transition" | "shot" | "character";
 
 type BlockSuggestionState = {
   kind: BlockSuggestionKind;
@@ -58,6 +58,8 @@ type BlockSuggestionState = {
 const TRANSITION_PREFIX_HINTS = ["CUT", "FADE", "DISS", "MATCH", "SMASH"];
 const SHOT_PREFIX_HINTS = ["CLOSE", "ANGLE", "POV", "INSERT", "WIDE", "TRACKING"];
 const FORMAT_TIPS_STORAGE_KEY = "pageone:show-format-tips";
+const TYPEWRITER_MODE_STORAGE_KEY = "pageone:typewriter-mode";
+const TYPEWRITER_TARGET_RATIO = 0.42;
 
 function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -85,15 +87,9 @@ function elementBackground(
   type: ScriptBlock["type"],
   isActive: boolean
 ): string {
-  if (type === "scene_heading" || type === "scene") {
-    return isActive ? "#f7f4ee" : "#fbfaf7";
-  }
-  if (type === "dialogue") return isActive ? "#f8f6f2" : "#fdfcf9";
-  if (type === "parenthetical") return isActive ? "#f7f5f1" : "#fdfcfb";
-  if (type === "transition") return isActive ? "#f6f4ef" : "#fbfaf7";
-  if (type === "shot") return isActive ? "#f8f6f2" : "#fdfcf9";
-  if (type === "character") return isActive ? "#f7f5f1" : "transparent";
-  return isActive ? "#f8f6f2" : "transparent";
+  void type;
+  void isActive;
+  return "transparent";
 }
 
 function elementAccent(type: ScriptBlock["type"]) {
@@ -118,9 +114,34 @@ function blockTypeLabel(type: ScriptBlock["type"]) {
   return type;
 }
 
-function getBlockSuggestions(block: ScriptBlock): BlockSuggestionState | null {
+function getBlockSuggestions(
+  block: ScriptBlock,
+  allBlocks: ScriptBlock[]
+): BlockSuggestionState | null {
   const normalizedType = block.type === "scene" ? "scene_heading" : block.type;
   const query = block.text.trim().toUpperCase();
+
+  if (normalizedType === "character") {
+    const names = Array.from(
+      new Set(
+        allBlocks
+          .filter((candidate) => candidate.type === "character")
+          .map((candidate) => candidate.text.trim().toUpperCase())
+          .filter(Boolean)
+      )
+    );
+
+    const options = names
+      .filter((name) => name !== query)
+      .sort((left, right) => {
+        const leftPrefix = query.length > 0 && left.startsWith(query) ? 0 : 1;
+        const rightPrefix = query.length > 0 && right.startsWith(query) ? 0 : 1;
+        if (leftPrefix !== rightPrefix) return leftPrefix - rightPrefix;
+        return left.localeCompare(right);
+      })
+      .slice(0, 10);
+    return options.length ? { kind: "character", options } : null;
+  }
 
   if (normalizedType === "scene_heading") {
     if (!query || query.includes(" ")) return null;
@@ -208,6 +229,10 @@ export default function ScriptEditor() {
     if (typeof window === "undefined") return false;
     return window.localStorage.getItem(FORMAT_TIPS_STORAGE_KEY) === "true";
   });
+  const [typewriterMode, setTypewriterMode] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(TYPEWRITER_MODE_STORAGE_KEY) === "true";
+  });
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showFormatSettings, setShowFormatSettings] = useState(false);
   const [showExportSettings, setShowExportSettings] = useState(false);
@@ -228,6 +253,8 @@ export default function ScriptEditor() {
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSaving = useRef(false);
   const textareaRefs = useRef(new Map<string, HTMLTextAreaElement>());
+  const workspaceRef = useRef<HTMLElement | null>(null);
+  const pendingScrollTop = useRef<number | null>(null);
   const pendingFocusBlockId = useRef<string | null>(null);
   const pendingCursorPosition = useRef<{ id: string; position: number } | null>(
     null
@@ -239,30 +266,92 @@ export default function ScriptEditor() {
     string | null
   >(null);
 
-  const ensureTextareaVisible = useCallback((textarea: HTMLTextAreaElement) => {
-    if (typeof window === "undefined") return;
+  const blockHasVisibleSuggestions = useCallback(
+    (blockId: string, textOverride?: string) => {
+      if (dismissedSuggestionBlockId === blockId) return false;
+      const block = blocks.find((candidate) => candidate.id === blockId);
+      if (!block) return false;
 
-    const viewportTop = 96;
-    const viewportBottom = window.innerHeight - 56;
-    const rect = textarea.getBoundingClientRect();
+      const suggestionBlock =
+        typeof textOverride === "string" ? { ...block, text: textOverride } : block;
+      const suggestions = getBlockSuggestions(suggestionBlock, blocks);
+      return Boolean(suggestions && suggestions.options.length > 0);
+    },
+    [blocks, dismissedSuggestionBlockId]
+  );
 
-    if (rect.top < viewportTop || rect.bottom > viewportBottom) {
-      textarea.scrollIntoView({
-        block: "nearest",
-        inline: "nearest",
-      });
-    }
-  }, []);
+  const scrollTextareaIntoView = useCallback(
+    (
+      textarea: HTMLTextAreaElement,
+      options?: { preferTypewriter?: boolean }
+    ) => {
+      if (typeof window === "undefined") return;
+
+      const preferTypewriter = options?.preferTypewriter === true;
+      const workspace = workspaceRef.current;
+
+      if (workspace && workspace.scrollHeight > workspace.clientHeight) {
+        const workspaceRect = workspace.getBoundingClientRect();
+        const rect = textarea.getBoundingClientRect();
+
+        if (preferTypewriter) {
+          const targetTop =
+            workspaceRect.top + workspace.clientHeight * TYPEWRITER_TARGET_RATIO;
+          const delta = rect.top - targetTop;
+          if (Math.abs(delta) > 8) {
+            workspace.scrollTop += delta;
+          }
+          return;
+        }
+
+        const viewportTop = workspaceRect.top + 14;
+        const viewportBottom = workspaceRect.bottom - 14;
+        if (rect.top < viewportTop) {
+          workspace.scrollTop -= viewportTop - rect.top;
+        } else if (rect.bottom > viewportBottom) {
+          workspace.scrollTop += rect.bottom - viewportBottom;
+        }
+        return;
+      }
+
+      const rect = textarea.getBoundingClientRect();
+      if (preferTypewriter) {
+        const targetTop = window.innerHeight * TYPEWRITER_TARGET_RATIO;
+        const delta = rect.top - targetTop;
+        if (Math.abs(delta) > 8) {
+          window.scrollBy({ top: delta, behavior: "auto" });
+        }
+        return;
+      }
+
+      const viewportTop = 96;
+      const viewportBottom = window.innerHeight - 56;
+      if (rect.top < viewportTop) {
+        window.scrollBy({ top: rect.top - viewportTop - 12, behavior: "auto" });
+      } else if (rect.bottom > viewportBottom) {
+        window.scrollBy({ top: rect.bottom - viewportBottom + 12, behavior: "auto" });
+      }
+    },
+    []
+  );
 
   const focusTextareaAtPosition = useCallback(
-    (textarea: HTMLTextAreaElement, position: number) => {
+    (
+      textarea: HTMLTextAreaElement,
+      position: number,
+      options?: { blockId?: string }
+    ) => {
       const safePosition = Math.max(0, Math.min(position, textarea.value.length));
+      const hasSuggestions =
+        options?.blockId ? blockHasVisibleSuggestions(options.blockId) : false;
 
       textarea.focus({ preventScroll: true });
       textarea.setSelectionRange(safePosition, safePosition);
-      ensureTextareaVisible(textarea);
+      scrollTextareaIntoView(textarea, {
+        preferTypewriter: typewriterMode && !hasSuggestions,
+      });
     },
-    [ensureTextareaVisible]
+    [blockHasVisibleSuggestions, scrollTextareaIntoView, typewriterMode]
   );
 
   const effectiveActiveBlockId = activeBlockId ?? blocks[0]?.id ?? null;
@@ -333,8 +422,21 @@ export default function ScriptEditor() {
     const textarea = textareaRefs.current.get(blockId);
     if (!textarea) return;
 
+    if (pendingScrollTop.current !== null) {
+      const workspace = workspaceRef.current;
+      if (workspace && workspace.scrollHeight > workspace.clientHeight) {
+        workspace.scrollTop = pendingScrollTop.current;
+      } else {
+        const scrollingElement = document.scrollingElement;
+        if (scrollingElement) {
+          scrollingElement.scrollTop = pendingScrollTop.current;
+        }
+      }
+      pendingScrollTop.current = null;
+    }
+
     resizeTextarea(textarea);
-    focusTextareaAtPosition(textarea, textarea.value.length);
+    focusTextareaAtPosition(textarea, textarea.value.length, { blockId });
     pendingFocusBlockId.current = null;
   }, [blocks, activeBlockId, focusTextareaAtPosition]);
 
@@ -345,7 +447,7 @@ export default function ScriptEditor() {
     const textarea = textareaRefs.current.get(pending.id);
     if (!textarea) return;
 
-    focusTextareaAtPosition(textarea, pending.position);
+    focusTextareaAtPosition(textarea, pending.position, { blockId: pending.id });
     pendingCursorPosition.current = null;
   }, [blocks, activeBlockId, focusTextareaAtPosition]);
 
@@ -402,6 +504,14 @@ export default function ScriptEditor() {
       showFormatTips ? "true" : "false"
     );
   }, [showFormatTips]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      TYPEWRITER_MODE_STORAGE_KEY,
+      typewriterMode ? "true" : "false"
+    );
+  }, [typewriterMode]);
 
   function closeMenus() {
     // Legacy desktop menu was removed; keep this as a shared extension hook.
@@ -489,6 +599,17 @@ export default function ScriptEditor() {
           return {
             ...block,
             type: "transition",
+            text: nextText,
+          };
+        }
+
+        if (kind === "character") {
+          const applied = replaceLeadingQuery(block.text, suggestion);
+          nextText = applied.text;
+          cursorPosition = applied.cursorPosition;
+          return {
+            ...block,
+            type: "character",
             text: nextText,
           };
         }
@@ -645,7 +766,7 @@ export default function ScriptEditor() {
     const activeSuggestions =
       dismissedSuggestionBlockId === current.id
         ? null
-        : getBlockSuggestions(current);
+        : getBlockSuggestions(current, blocks);
     const highlightedIndex =
       suggestionHighlightByBlock[current.id] !== undefined
         ? suggestionHighlightByBlock[current.id]
@@ -773,6 +894,13 @@ export default function ScriptEditor() {
         note: "",
       };
 
+      const workspace = workspaceRef.current;
+      if (workspace && workspace.scrollHeight > workspace.clientHeight) {
+        pendingScrollTop.current = workspace.scrollTop;
+      } else {
+        pendingScrollTop.current = document.scrollingElement?.scrollTop ?? window.scrollY;
+      }
+
       const updated = [...blocks];
       updated.splice(index + 1, 0, newBlock);
 
@@ -893,7 +1021,7 @@ export default function ScriptEditor() {
     const parentheticalOffsetPx = -12;
     const suggestions =
       isActiveBlock && dismissedSuggestionBlockId !== block.id
-        ? getBlockSuggestions(block)
+        ? getBlockSuggestions(block, blocks)
         : null;
     const highlightedIndex =
       suggestionHighlightByBlock[block.id] !== undefined
@@ -907,13 +1035,25 @@ export default function ScriptEditor() {
           disabled={block.locked}
           spellCheck
           ref={(textarea) => registerTextarea(block.id, textarea)}
-        onFocus={() => {
+        onFocus={(event) => {
           setActiveBlockId(block.id);
           setDismissedSuggestionBlockId(null);
+
+          if (typewriterMode && !blockHasVisibleSuggestions(block.id)) {
+            window.requestAnimationFrame(() => {
+              scrollTextareaIntoView(event.currentTarget, { preferTypewriter: true });
+            });
+          }
         }}
         onChange={(e) => {
           resizeTextarea(e.currentTarget);
           updateBlock(block.id, e.target.value);
+
+          if (typewriterMode && !blockHasVisibleSuggestions(block.id, e.target.value)) {
+            window.requestAnimationFrame(() => {
+              scrollTextareaIntoView(e.currentTarget, { preferTypewriter: true });
+            });
+          }
         }}
         onKeyDown={(e) => handleKeyDown(e, index)}
         rows={1}
@@ -940,8 +1080,8 @@ export default function ScriptEditor() {
           textAlign: blockTextAlign,
           textTransform: isUppercase ? "uppercase" : "none",
           fontFamily: '"Courier Prime", Courier, monospace',
-          fontSize: `${format.fontSize}pt`,
-          lineHeight: format.lineHeight,
+          fontSize: `${Math.max(12, format.fontSize)}pt`,
+          lineHeight: Math.max(1.2, format.lineHeight),
           background: showRevisionBackground
             ? revisionBackground(block.revisionColor)
             : elementBackground(block.type, isActiveBlock),
@@ -992,9 +1132,7 @@ export default function ScriptEditor() {
       <div
         id={`block-${block.id}`}
         key={block.id}
-        className={`group relative rounded-sm transition-colors ${
-          isActiveBlock ? "bg-zinc-100/55" : ""
-        }`}
+        className="group relative rounded-sm"
       >
         {block.type !== "action" && (
           <span
@@ -1008,7 +1146,7 @@ export default function ScriptEditor() {
 
         {isActiveBlock && (
           <span
-            className="absolute bottom-1 top-1 w-[3px] rounded-full bg-zinc-400/55"
+            className="absolute bottom-1 top-1 w-[2px] rounded-full bg-zinc-400/45"
             style={{ left: "-0.28in" }}
           />
         )}
@@ -1065,7 +1203,7 @@ export default function ScriptEditor() {
   return (
     <AppLayout contentClassName="px-0 py-0 sm:px-0 sm:py-0">
       <div
-        className="min-h-[calc(100vh-56px)] bg-[radial-gradient(130%_65%_at_50%_0%,#f7f4ee_0%,#f1eee8_58%,#ebe7e0_100%)] text-zinc-950 font-sans"
+        className="min-h-[calc(100vh-56px)] bg-zinc-50 text-zinc-950 font-sans"
       >
       <header className="sticky top-0 z-30 border-b border-zinc-200/90 bg-zinc-50/92 font-sans shadow-[0_1px_2px_rgba(15,23,42,0.06)] backdrop-blur-sm">
         <ScriptToolbar
@@ -1080,6 +1218,10 @@ export default function ScriptEditor() {
           onSaveNow={saveNow}
           isTitlePageVisible={showTitlePage}
           onToggleTitlePage={() => setShowTitlePage((value) => !value)}
+          isTypewriterMode={typewriterMode}
+          onToggleTypewriterMode={() =>
+            setTypewriterMode((currentValue) => !currentValue)
+          }
           onOpenExportSettings={() => setShowExportSettings(true)}
           onPrint={printScript}
           showFormatTips={showFormatTips}
@@ -1089,7 +1231,7 @@ export default function ScriptEditor() {
         />
       </header>
 
-      <section className="border-b border-zinc-200/90 bg-zinc-50/85 px-4 py-5 text-center">
+      <section className="border-b border-zinc-200/90 bg-zinc-50 px-4 py-5 text-center">
         <div className="mx-auto flex w-full max-w-[960px] items-center justify-center">
           <div>
             <p className="mx-auto max-w-[900px] truncate text-sm font-semibold tracking-[0.1em] text-zinc-700">
@@ -1103,7 +1245,12 @@ export default function ScriptEditor() {
       </section>
 
       <div className="font-sans">
-        <main className="min-h-[calc(100vh-206px)] overflow-x-hidden overflow-y-auto px-3 py-5 font-sans sm:px-6 sm:py-7 lg:px-8 lg:py-9">
+        <main
+          ref={(element) => {
+            workspaceRef.current = element;
+          }}
+          className="min-h-[calc(100vh-206px)] overflow-x-hidden overflow-y-auto px-3 py-5 font-sans sm:px-6 sm:py-7 lg:px-8 lg:py-9"
+        >
           <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 lg:flex-row lg:items-start lg:justify-center">
             <div className="flex min-w-0 flex-1 flex-col items-center gap-10">
               {showTitlePage && (
@@ -1132,7 +1279,7 @@ export default function ScriptEditor() {
                   >
                     <div className="mx-auto mt-24 w-full max-w-[560px] text-center">
                       <input
-                        value={resolvedTitlePage.title}
+                        value={titlePage.title}
                         onChange={(e) => updateTitle(e.target.value)}
                         className="w-full cursor-text appearance-none border-0 bg-transparent text-center text-[24px] font-semibold uppercase tracking-[0.1em] text-zinc-900 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50"
                         placeholder="UNTITLED SCRIPT"
@@ -1147,7 +1294,7 @@ export default function ScriptEditor() {
                         onChange={(e) =>
                           updateTitlePageField("writtenBy", e.target.value)
                         }
-                        className="mx-auto mt-4 w-full max-w-[400px] cursor-text appearance-none border-0 bg-transparent text-center text-[17px] text-zinc-900 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50"
+                        className="mx-auto mt-4 w-full max-w-[400px] cursor-text appearance-none border-0 bg-transparent text-center text-[18px] text-zinc-900 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50"
                         placeholder="Author Name"
                       />
 
@@ -1168,7 +1315,7 @@ export default function ScriptEditor() {
                           onChange={(e) =>
                             updateTitlePageField("contact", e.target.value)
                           }
-                          className="h-28 w-full resize-none cursor-text appearance-none border-0 bg-transparent leading-relaxed text-zinc-800 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50"
+                          className="h-28 w-full resize-none cursor-text appearance-none border-0 bg-transparent text-[13px] leading-relaxed text-zinc-800 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50"
                           placeholder="contact@email.com&#10;+1 (555) 555-5555"
                         />
                       </div>
@@ -1179,7 +1326,7 @@ export default function ScriptEditor() {
                           onChange={(e) =>
                             updateTitlePageField("draftDate", e.target.value)
                           }
-                          className="w-full cursor-text appearance-none border-0 bg-transparent text-left text-zinc-800 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50 sm:text-right"
+                          className="w-full cursor-text appearance-none border-0 bg-transparent text-left text-[13px] text-zinc-800 outline-none placeholder:text-zinc-300 focus-visible:ring-1 focus-visible:ring-zinc-400/50 sm:text-right"
                           placeholder="Draft date"
                         />
                       </div>
@@ -1201,8 +1348,8 @@ export default function ScriptEditor() {
                     paddingRight: `${VISUAL_PAGE_PADDING_RIGHT_PX}px`,
                     boxSizing: "border-box",
                     fontFamily: '"Courier Prime", Courier, monospace',
-                    fontSize: `${format.fontSize}pt`,
-                    lineHeight: format.lineHeight,
+                    fontSize: `${Math.max(12, format.fontSize)}pt`,
+                    lineHeight: Math.max(1.2, format.lineHeight),
                   }}
                 >
                   {pageIndex > 0 && (
