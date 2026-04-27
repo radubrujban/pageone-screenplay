@@ -48,7 +48,12 @@ const VISUAL_PAGE_CONTENT_WIDTH_PX =
   VISUAL_PAGE_PADDING_LEFT_PX -
   VISUAL_PAGE_PADDING_RIGHT_PX;
 
-type BlockSuggestionKind = "scene_heading" | "transition" | "shot" | "character";
+type BlockSuggestionKind =
+  | "scene_heading"
+  | "scene_heading_suffix"
+  | "transition"
+  | "shot"
+  | "character";
 
 type BlockSuggestionState = {
   kind: BlockSuggestionKind;
@@ -57,9 +62,18 @@ type BlockSuggestionState = {
 
 const TRANSITION_PREFIX_HINTS = ["CUT", "FADE", "DISS", "MATCH", "SMASH"];
 const SHOT_PREFIX_HINTS = ["CLOSE", "ANGLE", "POV", "INSERT", "WIDE", "TRACKING"];
+const SCENE_TIME_SUFFIXES = [
+  " - DAY",
+  " - NIGHT",
+  " - MORNING",
+  " - EVENING",
+  " - CONTINUOUS",
+  " - LATER",
+] as const;
 const FORMAT_TIPS_STORAGE_KEY = "pageone:show-format-tips";
 const TYPEWRITER_MODE_STORAGE_KEY = "pageone:typewriter-mode";
 const TYPEWRITER_TARGET_RATIO = 0.42;
+const INCH_PX = 96;
 
 function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -81,6 +95,17 @@ function resizeTextarea(textarea: HTMLTextAreaElement | null) {
 
   textarea.style.height = "auto";
   textarea.style.height = `${textarea.scrollHeight}px`;
+}
+
+function createEmptySceneHeadingBlock(): ScriptBlock {
+  return {
+    id: crypto.randomUUID(),
+    type: "scene_heading",
+    text: "",
+    revisionColor: "none",
+    locked: false,
+    note: "",
+  };
 }
 
 function elementBackground(
@@ -114,6 +139,10 @@ function blockTypeLabel(type: ScriptBlock["type"]) {
   return type;
 }
 
+function normalizeCharacterCue(value: string) {
+  return value.trim().replace(/\s+/g, " ").toUpperCase();
+}
+
 function getBlockSuggestions(
   block: ScriptBlock,
   allBlocks: ScriptBlock[]
@@ -122,33 +151,88 @@ function getBlockSuggestions(
   const query = block.text.trim().toUpperCase();
 
   if (normalizedType === "character") {
-    const names = Array.from(
-      new Set(
-        allBlocks
-          .filter((candidate) => candidate.type === "character")
-          .map((candidate) => candidate.text.trim().toUpperCase())
-          .filter(Boolean)
-      )
-    );
+    const normalizedQuery = normalizeCharacterCue(block.text);
 
-    const options = names
-      .filter((name) => name !== query)
-      .sort((left, right) => {
-        const leftPrefix = query.length > 0 && left.startsWith(query) ? 0 : 1;
-        const rightPrefix = query.length > 0 && right.startsWith(query) ? 0 : 1;
-        if (leftPrefix !== rightPrefix) return leftPrefix - rightPrefix;
-        return left.localeCompare(right);
-      })
+    const charactersByNormalized = new Map<string, string>();
+    allBlocks.forEach((candidate) => {
+      if (candidate.type !== "character") return;
+      const displayText = candidate.text.trim();
+      if (!displayText) return;
+      const normalizedText = normalizeCharacterCue(displayText);
+      if (!normalizedText || charactersByNormalized.has(normalizedText)) return;
+      charactersByNormalized.set(normalizedText, displayText);
+    });
+
+    const characterNames = Array.from(charactersByNormalized.entries()).map(
+      ([normalized, display]) => ({ normalized, display })
+    );
+    if (characterNames.length === 0) return null;
+
+    // TODO: Add SmartType-style next-speaker prediction from dialogue flow.
+    if (normalizedQuery.length === 0) {
+      const options = characterNames
+        .sort((left, right) => left.normalized.localeCompare(right.normalized))
+        .map((option) => option.display)
+        .slice(0, 10);
+      return options.length ? { kind: "character", options } : null;
+    }
+
+    const nonExactNames = characterNames.filter(
+      (option) => option.normalized !== normalizedQuery
+    );
+    const prefixMatches = nonExactNames
+      .filter((option) => option.normalized.startsWith(normalizedQuery))
+      .sort((left, right) => left.normalized.localeCompare(right.normalized));
+    if (prefixMatches.length === 0) return null;
+
+    const remaining = nonExactNames
+      .filter((option) => !option.normalized.startsWith(normalizedQuery))
+      .sort((left, right) => left.normalized.localeCompare(right.normalized));
+    const options = [...prefixMatches, ...remaining]
+      .map((option) => option.display)
       .slice(0, 10);
     return options.length ? { kind: "character", options } : null;
   }
 
   if (normalizedType === "scene_heading") {
-    if (!query || query.includes(" ")) return null;
-    const options = sceneHeadingSuggestions
-      .filter((suggestion) => suggestion.startsWith(query))
-      .filter((suggestion) => suggestion !== query);
-    return options.length ? { kind: "scene_heading", options: [...options] } : null;
+    if (!query) return null;
+
+    if (!query.includes(" ")) {
+      const options = sceneHeadingSuggestions
+        .filter((suggestion) => suggestion.startsWith(query))
+        .filter((suggestion) => suggestion !== query);
+      return options.length ? { kind: "scene_heading", options: [...options] } : null;
+    }
+
+    const headingMatch = query.match(/^(INT\.|EXT\.|INT\.\/EXT\.|EXT\.\/INT\.)(.*)$/);
+    if (!headingMatch) return null;
+
+    const remainder = (headingMatch[2] ?? "").trimStart();
+    if (!remainder) return null;
+
+    const alreadyHasTimeSuffix = SCENE_TIME_SUFFIXES.some((suffix) =>
+      query.endsWith(suffix)
+    );
+    if (alreadyHasTimeSuffix) return null;
+
+    const dashIndex = remainder.lastIndexOf(" - ");
+    if (dashIndex >= 0) {
+      const locationPart = remainder.slice(0, dashIndex).trim();
+      const suffixFragment = remainder.slice(dashIndex).toUpperCase();
+      if (!locationPart) return null;
+
+      const options = SCENE_TIME_SUFFIXES.filter((suffix) =>
+        suffix.startsWith(suffixFragment)
+      );
+      return options.length
+        ? { kind: "scene_heading_suffix", options: [...options] }
+        : null;
+    }
+
+    return {
+      kind: "scene_heading_suffix",
+      options: [...SCENE_TIME_SUFFIXES],
+    };
   }
 
   const transitionTriggered =
@@ -261,6 +345,9 @@ export default function ScriptEditor() {
   );
   const [suggestionHighlightByBlock, setSuggestionHighlightByBlock] = useState<
     Record<string, number>
+  >({});
+  const [suggestionIntentByBlock, setSuggestionIntentByBlock] = useState<
+    Record<string, boolean>
   >({});
   const [dismissedSuggestionBlockId, setDismissedSuggestionBlockId] = useState<
     string | null
@@ -415,6 +502,13 @@ export default function ScriptEditor() {
     return pages;
   }, [blocks]);
 
+  useEffect(() => {
+    if (blocks.length > 0) return;
+
+    const fallbackBlock = createEmptySceneHeadingBlock();
+    setBlocks([fallbackBlock]);
+  }, [blocks, setBlocks]);
+
   useLayoutEffect(() => {
     const blockId = pendingFocusBlockId.current;
     if (!blockId) return;
@@ -567,6 +661,10 @@ export default function ScriptEditor() {
 
     markUnsynced();
     setDismissedSuggestionBlockId((current) => (current === id ? null : current));
+    setSuggestionIntentByBlock((state) => ({
+      ...state,
+      [id]: false,
+    }));
   }
 
   function applySuggestionToBlock(
@@ -585,6 +683,24 @@ export default function ScriptEditor() {
           const applied = replaceLeadingQuery(block.text, suggestion);
           nextText = applied.text;
           cursorPosition = applied.cursorPosition;
+          return {
+            ...block,
+            type: "scene_heading",
+            text: nextText,
+          };
+        }
+
+        if (kind === "scene_heading_suffix") {
+          const currentText = block.text.toUpperCase();
+          const existingSuffix = SCENE_TIME_SUFFIXES.find((suffix) =>
+            currentText.endsWith(suffix)
+          );
+          const withoutKnownSuffix = existingSuffix
+            ? block.text.slice(0, block.text.length - existingSuffix.length)
+            : block.text;
+          const withoutPartialSuffix = withoutKnownSuffix.replace(/\s-\s?[A-Za-z]*$/, "");
+          nextText = `${withoutPartialSuffix.trimEnd()}${suggestion}`;
+          cursorPosition = nextText.length;
           return {
             ...block,
             type: "scene_heading",
@@ -627,6 +743,7 @@ export default function ScriptEditor() {
     pendingCursorPosition.current = { id, position: cursorPosition };
     setActiveBlockId(id);
     setSuggestionHighlightByBlock((state) => ({ ...state, [id]: 0 }));
+    setSuggestionIntentByBlock((state) => ({ ...state, [id]: false }));
     setDismissedSuggestionBlockId(null);
     markUnsynced();
   }
@@ -667,16 +784,7 @@ export default function ScriptEditor() {
 
     const newId = crypto.randomUUID();
 
-    const newBlocks: ScriptBlock[] = [
-      {
-        id: crypto.randomUUID(),
-        type: "action",
-        text: "FADE IN:",
-        revisionColor: "none",
-        locked: false,
-        note: "",
-      },
-    ];
+    const newBlocks: ScriptBlock[] = [createEmptySceneHeadingBlock()];
 
     await supabase.from("scripts").insert({
       id: newId,
@@ -703,6 +811,7 @@ export default function ScriptEditor() {
       draftDate: new Date().toLocaleDateString(),
     });
     setBlocks(newBlocks);
+    setActiveBlockId(newBlocks[0]?.id ?? null);
     navigate(`/script/${newId}`);
     closeMenus();
   }
@@ -771,6 +880,7 @@ export default function ScriptEditor() {
       suggestionHighlightByBlock[current.id] !== undefined
         ? suggestionHighlightByBlock[current.id]
         : 0;
+    const hasSuggestionIntent = suggestionIntentByBlock[current.id] === true;
     const clampedSuggestionIndex =
       activeSuggestions && activeSuggestions.options.length > 0
         ? Math.max(
@@ -779,16 +889,48 @@ export default function ScriptEditor() {
           )
         : 0;
 
-    const acceptActiveSuggestion = () => {
+    const acceptActiveSuggestion = (trigger: "tab" | "enter") => {
       if (!activeSuggestions || activeSuggestions.options.length === 0) {
         return false;
       }
 
+      let suggestionIndex = clampedSuggestionIndex;
+
+      if (activeSuggestions.kind === "character") {
+        const normalizedQuery = normalizeCharacterCue(current.text);
+        const firstSuggestion = activeSuggestions.options[0];
+        const hasStrongPrefixMatch =
+          normalizedQuery.length >= 1 &&
+          !!firstSuggestion &&
+          normalizeCharacterCue(firstSuggestion).startsWith(normalizedQuery);
+        const shouldAcceptCharacterSuggestion =
+          hasSuggestionIntent || hasStrongPrefixMatch;
+
+        if (!shouldAcceptCharacterSuggestion) {
+          if (trigger === "enter") {
+            setDismissedSuggestionBlockId(current.id);
+          }
+          setSuggestionIntentByBlock((state) => ({
+            ...state,
+            [current.id]: false,
+          }));
+          return false;
+        }
+
+        if (!hasSuggestionIntent) {
+          suggestionIndex = 0;
+        }
+      }
+
       applySuggestionToBlock(
         current.id,
-        activeSuggestions.options[clampedSuggestionIndex],
+        activeSuggestions.options[suggestionIndex],
         activeSuggestions.kind
       );
+      setSuggestionIntentByBlock((state) => ({
+        ...state,
+        [current.id]: false,
+      }));
       return true;
     };
 
@@ -803,11 +945,19 @@ export default function ScriptEditor() {
       if (e.key === "Escape") {
         e.preventDefault();
         setDismissedSuggestionBlockId(current.id);
+        setSuggestionIntentByBlock((state) => ({
+          ...state,
+          [current.id]: false,
+        }));
         return;
       }
 
       if (e.key === "ArrowDown") {
         e.preventDefault();
+        setSuggestionIntentByBlock((state) => ({
+          ...state,
+          [current.id]: true,
+        }));
         setSuggestionHighlightByBlock((state) => ({
           ...state,
           [current.id]:
@@ -818,6 +968,10 @@ export default function ScriptEditor() {
 
       if (e.key === "ArrowUp") {
         e.preventDefault();
+        setSuggestionIntentByBlock((state) => ({
+          ...state,
+          [current.id]: true,
+        }));
         setSuggestionHighlightByBlock((state) => ({
           ...state,
           [current.id]:
@@ -831,7 +985,7 @@ export default function ScriptEditor() {
     if (e.key === "Tab") {
       e.preventDefault();
 
-      if (acceptActiveSuggestion()) return;
+      if (acceptActiveSuggestion("tab")) return;
 
       const nextType = e.shiftKey
         ? getPreviousType(current.type)
@@ -877,7 +1031,7 @@ export default function ScriptEditor() {
         return;
       }
 
-      if (acceptActiveSuggestion()) {
+      if (acceptActiveSuggestion("enter")) {
         e.preventDefault();
         return;
       }
@@ -972,18 +1126,31 @@ export default function ScriptEditor() {
     const isShot = block.type === "shot";
     const isUppercase =
       isSceneHeading || isCharacter || isTransition || isShot;
-    const usesCenteredColumn = isCharacter || isParenthetical || isDialogue;
-    const dialogueColumnWidthPx = 336;
-    const characterWidthPx = 300;
-    const parentheticalWidthPx = 250;
+    const contentWidthPx = VISUAL_PAGE_CONTENT_WIDTH_PX;
+    const actionWidthPx = contentWidthPx;
+    const characterIndentPx = Math.max(
+      0,
+      (format.characterIndent - format.leftMargin) * INCH_PX
+    );
+    const characterWidthPx = Math.min(
+      contentWidthPx - characterIndentPx,
+      2.5 * INCH_PX
+    );
+    const dialogueIndentPx = Math.max(
+      0,
+      (format.dialogueIndent - format.leftMargin) * INCH_PX
+    );
+    const dialogueWidthPx = Math.min(contentWidthPx - dialogueIndentPx, format.dialogueWidth * INCH_PX);
+    const parentheticalIndentPx = Math.max(0, (3 - format.leftMargin) * INCH_PX);
+    const parentheticalWidthPx = Math.min(contentWidthPx - parentheticalIndentPx, 2.5 * INCH_PX);
 
     const blockWidth = isCharacter
       ? `${characterWidthPx}px`
       : isParenthetical
         ? `${parentheticalWidthPx}px`
         : isDialogue
-          ? `${dialogueColumnWidthPx}px`
-          : "100%";
+          ? `${dialogueWidthPx}px`
+          : `${actionWidthPx}px`;
 
     const blockMarginTop =
       isSceneHeading
@@ -1015,10 +1182,9 @@ export default function ScriptEditor() {
                 : isDialogue
                   ? "0.11in"
                   : isAction || isGeneral
-                    ? "0.05in"
+                  ? "0.05in"
                     : "0in";
-    const blockTextAlign = isCharacter ? "center" : isTransition ? "right" : "left";
-    const parentheticalOffsetPx = -12;
+    const blockTextAlign = isTransition ? "right" : "left";
     const suggestions =
       isActiveBlock && dismissedSuggestionBlockId !== block.id
         ? getBlockSuggestions(block, blocks)
@@ -1038,6 +1204,10 @@ export default function ScriptEditor() {
         onFocus={(event) => {
           setActiveBlockId(block.id);
           setDismissedSuggestionBlockId(null);
+          setSuggestionIntentByBlock((state) => ({
+            ...state,
+            [block.id]: false,
+          }));
 
           if (typewriterMode && !blockHasVisibleSuggestions(block.id)) {
             window.requestAnimationFrame(() => {
@@ -1062,19 +1232,15 @@ export default function ScriptEditor() {
           width: blockWidth,
           marginTop: blockMarginTop,
           marginBottom: blockMarginBottom,
-          marginLeft: usesCenteredColumn
-            ? isCharacter
-              ? "auto"
-              : isParenthetical
-              ? `${parentheticalOffsetPx}px`
-              : "0px"
-            : "0px",
-          marginRight: usesCenteredColumn
-            ? isCharacter || isParenthetical
-              ? "auto"
-              : "0px"
-            : "0px",
-          paddingLeft: isParenthetical ? "0.1in" : "0in",
+          marginLeft: isCharacter
+            ? `${characterIndentPx}px`
+            : isParenthetical
+              ? `${parentheticalIndentPx}px`
+              : isDialogue
+                ? `${dialogueIndentPx}px`
+                : "0px",
+          marginRight: "0px",
+          paddingLeft: "0in",
           fontWeight: isUppercase ? 700 : 400,
           fontStyle: isParenthetical ? "italic" : "normal",
           textAlign: blockTextAlign,
@@ -1186,16 +1352,7 @@ export default function ScriptEditor() {
             locked
           </span>
         )}
-        {usesCenteredColumn ? (
-          <div
-            className="mx-auto"
-            style={{ width: `${dialogueColumnWidthPx}px` }}
-          >
-            {textareaElement}
-          </div>
-        ) : (
-          textareaElement
-        )}
+        {textareaElement}
       </div>
     );
   }
