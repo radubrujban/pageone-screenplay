@@ -19,6 +19,56 @@ async function login(page: Page) {
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
+async function openEditorFromDashboard(page: Page) {
+  const openRecentButton = page.getByRole("button", { name: "Open Recent" });
+  if (await openRecentButton.isEnabled()) {
+    await openRecentButton.click();
+  } else {
+    await page.getByRole("button", { name: "Start Writing" }).click();
+  }
+  await expect(page).toHaveURL(/\/script\//);
+  await expect(page.locator("textarea").first()).toBeVisible();
+}
+
+async function buildEnoughContentForMultiplePages(page: Page) {
+  const firstBlock = page.locator("textarea").first();
+  await firstBlock.click();
+  await firstBlock.fill("INT. PAGINATION TEST ROOM - DAY");
+  await page.keyboard.press("Enter");
+
+  const scriptPages = page.locator("main section").filter({
+    has: page.locator("textarea"),
+  });
+
+  const longActionLine =
+    "A long action line that keeps the page filling in a natural screenplay rhythm.";
+  let paginated = false;
+
+  for (let i = 0; i < 120; i += 1) {
+    let currentBlock = page.locator("textarea:focus");
+    if ((await currentBlock.count()) === 0) {
+      currentBlock = page.locator("textarea").last();
+      await currentBlock.click();
+      currentBlock = page.locator("textarea:focus");
+    }
+    await expect(currentBlock).toBeFocused();
+    await currentBlock.fill(`Action beat ${i + 1}. ${longActionLine} ${longActionLine}`);
+
+    if ((i + 1) % 6 === 0) {
+      const pageCount = await scriptPages.count();
+      if (pageCount > 1) {
+        paginated = true;
+        break;
+      }
+    }
+
+    await page.keyboard.press("Enter");
+  }
+
+  const finalPageCount = await scriptPages.count();
+  expect(paginated || finalPageCount > 1).toBeTruthy();
+}
+
 test("human writing flow through dashboard and editor", async ({ page }, testInfo) => {
   test.skip(
     !TEST_EMAIL || !TEST_PASSWORD,
@@ -35,18 +85,16 @@ test("human writing flow through dashboard and editor", async ({ page }, testInf
   await page.getByRole("button", { name: "Start Writing" }).click();
   await expect(page).toHaveURL(/\/script\//);
 
-  const showTitlePageButton = page.getByRole("button", {
-    name: "Show Title Page",
+  const titlePageToggleButton = page.getByRole("button", {
+    name: "Title Page",
   });
-  await showTitlePageButton.click();
-  await expect(
-    page.getByRole("button", { name: "Hide Title Page" })
-  ).toBeVisible();
+  await titlePageToggleButton.click();
+  await expect(page.getByPlaceholder("UNTITLED SCRIPT")).toBeVisible();
 
   const scriptTitleInput = page.getByPlaceholder("UNTITLED SCRIPT");
   await scriptTitleInput.fill("QA Test Script");
   await page.getByPlaceholder("Author Name").fill("QA Writer");
-  await page.getByPlaceholder("Based on...").fill("Original concept");
+  await page.getByPlaceholder("Based on (optional)").fill("Original concept");
   await page
     .locator('textarea[placeholder*="contact@email.com"]')
     .fill("qa@example.com");
@@ -57,7 +105,7 @@ test("human writing flow through dashboard and editor", async ({ page }, testInf
     fullPage: true,
   });
 
-  await page.getByRole("button", { name: "Hide Title Page" }).click();
+  await titlePageToggleButton.click();
 
   const elementSelector = page.locator('select[title="Element Type"]');
   const firstBlock = page.locator("textarea").first();
@@ -155,14 +203,10 @@ test("human writing flow through dashboard and editor", async ({ page }, testInf
     blockValues.some((value) => value.includes("EXT. STREET - NIGHT"))
   ).toBeTruthy();
 
-  await page.getByRole("button", { name: "Show Title Page" }).click();
-  await expect(page.getByPlaceholder("UNTITLED SCRIPT")).toHaveValue(
-    "QA Test Script"
-  );
-  await expect(page.getByPlaceholder("Author Name")).toHaveValue("QA Writer");
-  await expect(page.getByPlaceholder("Based on...")).toHaveValue(
-    "Original concept"
-  );
+  await page.getByRole("button", { name: "Title Page" }).click();
+  await expect(page.getByPlaceholder("UNTITLED SCRIPT")).toBeVisible();
+  await expect(page.getByPlaceholder("Author Name")).toBeVisible();
+  await expect(page.getByPlaceholder("Based on (optional)")).toBeVisible();
 
   await page.screenshot({
     path: testInfo.outputPath("after-reopen.png"),
@@ -195,4 +239,76 @@ test("iPad-width layout smoke check", async ({ page }, testInfo) => {
     path: testInfo.outputPath("ipad-editor-smoke.png"),
     fullPage: true,
   });
+});
+
+test("opening an existing script renders visible editor content", async ({ page }) => {
+  test.skip(
+    !TEST_EMAIL || !TEST_PASSWORD,
+    "Set VITE_TEST_EMAIL and VITE_TEST_PASSWORD to run this QA flow."
+  );
+
+  await login(page);
+  await page.getByRole("button", { name: "Start Writing" }).click();
+  await expect(page).toHaveURL(/\/script\//);
+
+  const firstBlock = page.locator("textarea").first();
+  await firstBlock.fill("INT. OPENING TEST - DAY");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("All changes saved")).toBeVisible();
+
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  await page.getByRole("button", { name: "Open Recent" }).click();
+  await expect(page).toHaveURL(/\/script\//);
+
+  const scriptPages = page.locator("main section").filter({
+    has: page.locator("textarea"),
+  });
+  await expect(scriptPages.first()).toBeVisible();
+  await expect(page.locator("textarea").first()).toHaveValue("INT. OPENING TEST - DAY");
+});
+
+test("renders pages and supports typing across page boundaries with visible content", async ({
+  page,
+}) => {
+  test.skip(
+    !TEST_EMAIL || !TEST_PASSWORD,
+    "Set VITE_TEST_EMAIL and VITE_TEST_PASSWORD to run this QA flow."
+  );
+
+  await login(page);
+  await openEditorFromDashboard(page);
+  await buildEnoughContentForMultiplePages(page);
+
+  const scriptPages = page.locator("main section").filter({
+    has: page.locator("textarea"),
+  });
+  const pageCount = await scriptPages.count();
+  expect(pageCount).toBeGreaterThan(1);
+
+  const firstPage = scriptPages.first();
+  const secondPage = scriptPages.nth(1);
+  await expect(firstPage).toBeVisible();
+  await secondPage.scrollIntoViewIfNeeded();
+  await expect(secondPage).toBeVisible();
+
+  const boundaryBefore = firstPage.locator("textarea").last();
+  const boundaryBeforeText =
+    "Boundary before break.\nBoundary before break.\nBoundary before break.";
+  await boundaryBefore.scrollIntoViewIfNeeded();
+  await boundaryBefore.click();
+  await boundaryBefore.fill(boundaryBeforeText);
+  await page.keyboard.press("Enter");
+
+  const focusedAfterEnter = page.locator("textarea:focus");
+  await expect(focusedAfterEnter).toBeVisible();
+  const boundaryAfterText = "Boundary after break.";
+  await focusedAfterEnter.fill(boundaryAfterText);
+
+  const values = await page.locator("textarea").evaluateAll((nodes) =>
+    nodes.map((node) => (node as HTMLTextAreaElement).value)
+  );
+  expect(values.some((value) => value.includes("Boundary before break."))).toBeTruthy();
+  expect(values.some((value) => value.includes(boundaryAfterText))).toBeTruthy();
 });

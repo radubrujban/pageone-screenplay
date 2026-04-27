@@ -1,3 +1,6 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
@@ -11,6 +14,10 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:4173",
     browserName: "chromium",
     trace: "retain-on-failure",
+    headless: false,
+    launchOptions: {
+      slowMo: 500,
+    },
   },
   webServer: {
     command: "npm run dev -- --host 127.0.0.1 --port 4173",
@@ -19,4 +26,3 @@ export default defineConfig({
     timeout: 120_000,
   },
 });
-
