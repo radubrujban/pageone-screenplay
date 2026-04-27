@@ -3,6 +3,7 @@ import {
   Download,
   FilePlus2,
   FileText,
+  Lightbulb,
   Save,
   Settings2,
 } from "lucide-react";
@@ -21,6 +22,8 @@ type ScriptToolbarProps = {
   onOpenExportSettings: () => void;
   onPrint: () => void;
   onOpenFormatSettings: () => void;
+  showFormatTips: boolean;
+  onToggleFormatTips: () => void;
 };
 
 type ToolbarButtonProps = {
@@ -74,6 +77,8 @@ export default function ScriptToolbar({
   onOpenExportSettings,
   onPrint,
   onOpenFormatSettings,
+  showFormatTips,
+  onToggleFormatTips,
 }: ScriptToolbarProps) {
   const selectedElementType =
     activeElementType === "scene" ? "scene_heading" : activeElementType;
@@ -130,6 +135,12 @@ export default function ScriptToolbar({
             label="Format"
             icon={Settings2}
             onClick={onOpenFormatSettings}
+          />
+          <ToolbarButton
+            label="Tips"
+            icon={Lightbulb}
+            onClick={onToggleFormatTips}
+            active={showFormatTips}
           />
           <button
             type="button"

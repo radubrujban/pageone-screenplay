@@ -31,6 +31,7 @@ import type {
   TitlePageData,
 } from "../lib/screenplayFormat";
 import AppLayout from "./AppLayout";
+import FormatTipsBox from "./FormatTipsBox";
 import ScriptToolbar from "./ScriptToolbar";
 import { useScriptStore } from "../store/useScriptStore";
 import type { RevisionColor, ScriptBlock } from "../types/script";
@@ -65,6 +66,7 @@ type BlockSuggestionState = {
 
 const TRANSITION_PREFIX_HINTS = ["CUT", "FADE", "DISS", "MATCH", "SMASH"];
 const SHOT_PREFIX_HINTS = ["CLOSE", "ANGLE", "POV", "INSERT", "WIDE", "TRACKING"];
+const FORMAT_TIPS_STORAGE_KEY = "pageone:show-format-tips";
 
 function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -212,6 +214,10 @@ export default function ScriptEditor() {
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
 
   const [showTitlePage, setShowTitlePage] = useState(false);
+  const [showFormatTips, setShowFormatTips] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(FORMAT_TIPS_STORAGE_KEY) === "true";
+  });
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [showFormatSettings, setShowFormatSettings] = useState(false);
   const [showExportSettings, setShowExportSettings] = useState(false);
@@ -243,6 +249,32 @@ export default function ScriptEditor() {
   const [dismissedSuggestionBlockId, setDismissedSuggestionBlockId] = useState<
     string | null
   >(null);
+
+  const ensureTextareaVisible = useCallback((textarea: HTMLTextAreaElement) => {
+    if (typeof window === "undefined") return;
+
+    const viewportTop = 96;
+    const viewportBottom = window.innerHeight - 56;
+    const rect = textarea.getBoundingClientRect();
+
+    if (rect.top < viewportTop || rect.bottom > viewportBottom) {
+      textarea.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+      });
+    }
+  }, []);
+
+  const focusTextareaAtPosition = useCallback(
+    (textarea: HTMLTextAreaElement, position: number) => {
+      const safePosition = Math.max(0, Math.min(position, textarea.value.length));
+
+      textarea.focus({ preventScroll: true });
+      textarea.setSelectionRange(safePosition, safePosition);
+      ensureTextareaVisible(textarea);
+    },
+    [ensureTextareaVisible]
+  );
 
   const effectiveActiveBlockId = activeBlockId ?? blocks[0]?.id ?? null;
   const activeBlock = blocks.find((block) => block.id === effectiveActiveBlockId);
@@ -315,11 +347,10 @@ export default function ScriptEditor() {
     const textarea = textareaRefs.current.get(blockId);
     if (!textarea) return;
 
-    textarea.focus();
-    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
     resizeTextarea(textarea);
+    focusTextareaAtPosition(textarea, textarea.value.length);
     pendingFocusBlockId.current = null;
-  }, [blocks, activeBlockId]);
+  }, [blocks, activeBlockId, focusTextareaAtPosition]);
 
   useLayoutEffect(() => {
     const pending = pendingCursorPosition.current;
@@ -328,10 +359,9 @@ export default function ScriptEditor() {
     const textarea = textareaRefs.current.get(pending.id);
     if (!textarea) return;
 
-    textarea.focus();
-    textarea.setSelectionRange(pending.position, pending.position);
+    focusTextareaAtPosition(textarea, pending.position);
     pendingCursorPosition.current = null;
-  }, [blocks, activeBlockId]);
+  }, [blocks, activeBlockId, focusTextareaAtPosition]);
 
   function registerTextarea(id: string, textarea: HTMLTextAreaElement | null) {
     if (textarea) {
@@ -379,6 +409,14 @@ export default function ScriptEditor() {
     };
   }, [blocks, title, titlePage, runSave]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      FORMAT_TIPS_STORAGE_KEY,
+      showFormatTips ? "true" : "false"
+    );
+  }, [showFormatTips]);
+
   function closeMenus() {
     setActiveMenu(null);
   }
@@ -404,21 +442,32 @@ export default function ScriptEditor() {
   }
 
   function updateBlock(id: string, value: string) {
-    setBlocks(
-      blocks.map((block) =>
-        block.id === id
-          ? {
-              ...block,
-              text: value,
-              type: detectType(value, block.type),
-              revisionColor:
-                revisionMode && block.revisionColor === undefined
-                  ? currentRevisionColor
-                  : block.revisionColor,
-            }
-          : block
-      )
-    );
+    const blockIndex = blocks.findIndex((block) => block.id === id);
+    if (blockIndex < 0) return;
+
+    const currentBlock = blocks[blockIndex];
+    const detectedType = detectType(value, currentBlock.type);
+    const nextRevisionColor =
+      revisionMode && currentBlock.revisionColor === undefined
+        ? currentRevisionColor
+        : currentBlock.revisionColor;
+
+    if (
+      currentBlock.text === value &&
+      currentBlock.type === detectedType &&
+      currentBlock.revisionColor === nextRevisionColor
+    ) {
+      return;
+    }
+
+    const updated = [...blocks];
+    updated[blockIndex] = {
+      ...currentBlock,
+      text: value,
+      type: detectedType,
+      revisionColor: nextRevisionColor,
+    };
+    setBlocks(updated);
 
     markUnsynced();
     setDismissedSuggestionBlockId((current) => (current === id ? null : current));
@@ -476,20 +525,29 @@ export default function ScriptEditor() {
   }
 
   function updateBlockType(id: string, type: ScriptBlock["type"]) {
-    setBlocks(
-      blocks.map((block) =>
-        block.id === id
-          ? {
-              ...block,
-              type,
-              revisionColor:
-                revisionMode && !block.revisionColor
-                  ? currentRevisionColor
-                  : block.revisionColor,
-            }
-          : block
-      )
-    );
+    const blockIndex = blocks.findIndex((block) => block.id === id);
+    if (blockIndex < 0) return;
+
+    const currentBlock = blocks[blockIndex];
+    const nextRevisionColor =
+      revisionMode && !currentBlock.revisionColor
+        ? currentRevisionColor
+        : currentBlock.revisionColor;
+
+    if (
+      currentBlock.type === type &&
+      currentBlock.revisionColor === nextRevisionColor
+    ) {
+      return;
+    }
+
+    const updated = [...blocks];
+    updated[blockIndex] = {
+      ...currentBlock,
+      type,
+      revisionColor: nextRevisionColor,
+    };
+    setBlocks(updated);
     markUnsynced();
     setDismissedSuggestionBlockId((current) => (current === id ? null : current));
   }
@@ -1307,6 +1365,10 @@ export default function ScriptEditor() {
           onOpenExportSettings={() => setShowExportSettings(true)}
           onPrint={printScript}
           onOpenFormatSettings={() => setShowFormatSettings(true)}
+          showFormatTips={showFormatTips}
+          onToggleFormatTips={() =>
+            setShowFormatTips((currentValue) => !currentValue)
+          }
         />
       </header>
 
@@ -1321,126 +1383,140 @@ export default function ScriptEditor() {
 
       <div className="font-sans">
         <main className="min-h-[calc(100vh-206px)] overflow-x-auto overflow-y-auto px-3 py-4 font-sans sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-          <div className="mx-auto flex w-full max-w-[980px] flex-col items-center gap-8">
-            {showTitlePage && (
-              <section
-                className="w-full border border-zinc-300 bg-white text-black shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
-                style={{
-                  width: `min(${VISUAL_PAGE_MAX_WIDTH_PX}px, calc(100vw - 2.5rem))`,
-                  minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
-                  paddingTop: `${VISUAL_PAGE_PADDING_TOP_PX}px`,
-                  paddingBottom: `${VISUAL_PAGE_PADDING_BOTTOM_PX}px`,
-                  paddingLeft: `${VISUAL_PAGE_PADDING_LEFT_PX}px`,
-                  paddingRight: `${VISUAL_PAGE_PADDING_RIGHT_PX}px`,
-                  boxSizing: "border-box",
-                  fontFamily: '"Courier Prime", Courier, monospace',
-                }}
-              >
-                <div
-                  className="mx-auto flex w-full flex-col"
+          <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 lg:flex-row lg:items-start lg:justify-center">
+            <div className="flex min-w-0 flex-1 flex-col items-center gap-8">
+              {showTitlePage && (
+                <section
+                  className="w-full border border-zinc-300 bg-white text-black shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
                   style={{
-                    minHeight: `${
-                      VISUAL_PAGE_MIN_HEIGHT_PX -
-                      VISUAL_PAGE_PADDING_TOP_PX -
-                      VISUAL_PAGE_PADDING_BOTTOM_PX
-                    }px`,
+                    width: `min(${VISUAL_PAGE_MAX_WIDTH_PX}px, calc(100vw - 2.5rem))`,
+                    minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
+                    paddingTop: `${VISUAL_PAGE_PADDING_TOP_PX}px`,
+                    paddingBottom: `${VISUAL_PAGE_PADDING_BOTTOM_PX}px`,
+                    paddingLeft: `${VISUAL_PAGE_PADDING_LEFT_PX}px`,
+                    paddingRight: `${VISUAL_PAGE_PADDING_RIGHT_PX}px`,
+                    boxSizing: "border-box",
+                    fontFamily: '"Courier Prime", Courier, monospace',
                   }}
                 >
-                  <div className="mx-auto mt-20 w-full max-w-[540px] text-center">
-                    <input
-                      value={resolvedTitlePage.title}
-                      onChange={(e) => updateTitle(e.target.value)}
-                      className="w-full bg-transparent text-center text-[22px] font-semibold uppercase tracking-[0.08em] outline-none placeholder:text-zinc-300"
-                      placeholder="UNTITLED SCRIPT"
-                    />
-
-                    <p className="mt-16 text-[13px] uppercase tracking-[0.18em] text-zinc-500">
-                      Written by
-                    </p>
-
-                    <input
-                      value={titlePage.writtenBy}
-                      onChange={(e) =>
-                        updateTitlePageField("writtenBy", e.target.value)
-                      }
-                      className="mx-auto mt-3 w-full max-w-[380px] bg-transparent text-center text-[17px] outline-none placeholder:text-zinc-300"
-                      placeholder="Author Name"
-                    />
-
-                    <input
-                      value={titlePage.basedOn}
-                      onChange={(e) =>
-                        updateTitlePageField("basedOn", e.target.value)
-                      }
-                      className="mx-auto mt-7 w-full max-w-[420px] bg-transparent text-center text-[12px] italic text-zinc-700 outline-none placeholder:text-zinc-300"
-                      placeholder="Based on..."
-                    />
-                  </div>
-
-                  <div className="mt-auto grid grid-cols-1 gap-6 pt-16 text-[12px] sm:grid-cols-2">
-                    <div className="text-left">
-                      <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
-                        Contact
-                      </p>
-                      <textarea
-                        value={titlePage.contact}
-                        onChange={(e) =>
-                          updateTitlePageField("contact", e.target.value)
-                        }
-                        className="h-28 w-full resize-none bg-transparent leading-relaxed outline-none placeholder:text-zinc-300"
-                        placeholder="contact@email.com&#10;+1 (555) 555-5555"
-                      />
-                    </div>
-
-                    <div className="text-left sm:text-right">
-                      <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
-                        Draft Date
-                      </p>
+                  <div
+                    className="mx-auto flex w-full flex-col"
+                    style={{
+                      minHeight: `${
+                        VISUAL_PAGE_MIN_HEIGHT_PX -
+                        VISUAL_PAGE_PADDING_TOP_PX -
+                        VISUAL_PAGE_PADDING_BOTTOM_PX
+                      }px`,
+                    }}
+                  >
+                    <div className="mx-auto mt-20 w-full max-w-[540px] text-center">
                       <input
-                        value={titlePage.draftDate}
+                        value={resolvedTitlePage.title}
+                        onChange={(e) => updateTitle(e.target.value)}
+                        className="w-full bg-transparent text-center text-[22px] font-semibold uppercase tracking-[0.08em] outline-none placeholder:text-zinc-300"
+                        placeholder="UNTITLED SCRIPT"
+                      />
+
+                      <p className="mt-16 text-[13px] uppercase tracking-[0.18em] text-zinc-500">
+                        Written by
+                      </p>
+
+                      <input
+                        value={titlePage.writtenBy}
                         onChange={(e) =>
-                          updateTitlePageField("draftDate", e.target.value)
+                          updateTitlePageField("writtenBy", e.target.value)
                         }
-                        className="w-full bg-transparent text-left outline-none placeholder:text-zinc-300 sm:text-right"
-                        placeholder="Draft date"
+                        className="mx-auto mt-3 w-full max-w-[380px] bg-transparent text-center text-[17px] outline-none placeholder:text-zinc-300"
+                        placeholder="Author Name"
+                      />
+
+                      <input
+                        value={titlePage.basedOn}
+                        onChange={(e) =>
+                          updateTitlePageField("basedOn", e.target.value)
+                        }
+                        className="mx-auto mt-7 w-full max-w-[420px] bg-transparent text-center text-[12px] italic text-zinc-700 outline-none placeholder:text-zinc-300"
+                        placeholder="Based on..."
                       />
                     </div>
+
+                    <div className="mt-auto grid grid-cols-1 gap-6 pt-16 text-[12px] sm:grid-cols-2">
+                      <div className="text-left">
+                        <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+                          Contact
+                        </p>
+                        <textarea
+                          value={titlePage.contact}
+                          onChange={(e) =>
+                            updateTitlePageField("contact", e.target.value)
+                          }
+                          className="h-28 w-full resize-none bg-transparent leading-relaxed outline-none placeholder:text-zinc-300"
+                          placeholder="contact@email.com&#10;+1 (555) 555-5555"
+                        />
+                      </div>
+
+                      <div className="text-left sm:text-right">
+                        <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+                          Draft Date
+                        </p>
+                        <input
+                          value={titlePage.draftDate}
+                          onChange={(e) =>
+                            updateTitlePageField("draftDate", e.target.value)
+                          }
+                          className="w-full bg-transparent text-left outline-none placeholder:text-zinc-300 sm:text-right"
+                          placeholder="Draft date"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </section>
+                </section>
+              )}
+
+              {visualPageBlockIndices.map((pageIndices, pageIndex) => (
+                <section
+                  key={`visual-page-${pageIndex}`}
+                  className="w-full border border-zinc-300 bg-white text-black shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
+                  style={{
+                    width: `min(${VISUAL_PAGE_MAX_WIDTH_PX}px, calc(100vw - 2.5rem))`,
+                    minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
+                    paddingTop: `${VISUAL_PAGE_PADDING_TOP_PX}px`,
+                    paddingBottom: `${VISUAL_PAGE_PADDING_BOTTOM_PX}px`,
+                    paddingLeft: `${VISUAL_PAGE_PADDING_LEFT_PX}px`,
+                    paddingRight: `${VISUAL_PAGE_PADDING_RIGHT_PX}px`,
+                    boxSizing: "border-box",
+                    fontFamily: '"Courier Prime", Courier, monospace',
+                    fontSize: `${format.fontSize}pt`,
+                    lineHeight: format.lineHeight,
+                  }}
+                >
+                  {pageIndex > 0 && (
+                    <div className="mb-6 border-b border-zinc-200 pb-3 text-right text-[10px] uppercase tracking-[0.14em] text-zinc-400">
+                      Page {pageIndex + 1}
+                    </div>
+                  )}
+
+                  <div
+                    className="mx-auto"
+                    style={{ width: `${VISUAL_PAGE_CONTENT_WIDTH_PX}px` }}
+                  >
+                    {pageIndices.map((blockIndex) => {
+                      const block = blocks[blockIndex];
+                      return block ? renderBlock(block, blockIndex) : null;
+                    })}
+                  </div>
+                </section>
+              ))}
+            </div>
+
+            {showFormatTips && (
+              <div className="w-full lg:sticky lg:top-[152px] lg:w-[280px] lg:flex-none">
+                <FormatTipsBox
+                  activeType={activeBlock?.type ?? "action"}
+                  onClose={() => setShowFormatTips(false)}
+                />
+              </div>
             )}
-
-            {visualPageBlockIndices.map((pageIndices, pageIndex) => (
-              <section
-                key={`visual-page-${pageIndex}`}
-                className="w-full border border-zinc-300 bg-white text-black shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
-                style={{
-                  width: `min(${VISUAL_PAGE_MAX_WIDTH_PX}px, calc(100vw - 2.5rem))`,
-                  minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
-                  paddingTop: `${VISUAL_PAGE_PADDING_TOP_PX}px`,
-                  paddingBottom: `${VISUAL_PAGE_PADDING_BOTTOM_PX}px`,
-                  paddingLeft: `${VISUAL_PAGE_PADDING_LEFT_PX}px`,
-                  paddingRight: `${VISUAL_PAGE_PADDING_RIGHT_PX}px`,
-                  boxSizing: "border-box",
-                  fontFamily: '"Courier Prime", Courier, monospace',
-                  fontSize: `${format.fontSize}pt`,
-                  lineHeight: format.lineHeight,
-                }}
-              >
-                {pageIndex > 0 && (
-                  <div className="mb-6 border-b border-zinc-200 pb-3 text-right text-[10px] uppercase tracking-[0.14em] text-zinc-400">
-                    Page {pageIndex + 1}
-                  </div>
-                )}
-
-                <div className="mx-auto" style={{ width: `${VISUAL_PAGE_CONTENT_WIDTH_PX}px` }}>
-                  {pageIndices.map((blockIndex) => {
-                    const block = blocks[blockIndex];
-                    return block ? renderBlock(block, blockIndex) : null;
-                  })}
-                </div>
-              </section>
-            ))}
           </div>
         </main>
       </div>
