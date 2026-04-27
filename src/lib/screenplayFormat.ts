@@ -39,6 +39,7 @@ type ExportBuildInput = {
 
 type PdfBuildInput = ExportBuildInput & {
   format: FormatSettings;
+  pageBlockIndices?: number[][];
 };
 
 export const defaultFormat: FormatSettings = {
@@ -82,6 +83,15 @@ function isSceneHeadingType(type: ScriptBlock["type"]) {
 
 function normalizeBlockType(type: ScriptBlock["type"]): ScriptBlock["type"] {
   return type === "scene" ? "scene_heading" : type;
+}
+
+function isDialogueFlowType(type: ScriptBlock["type"]) {
+  const normalizedType = normalizeBlockType(type);
+  return (
+    normalizedType === "character" ||
+    normalizedType === "parenthetical" ||
+    normalizedType === "dialogue"
+  );
 }
 
 export const sceneHeadingSuggestions = [
@@ -187,20 +197,60 @@ export function buildFountain({
   titlePage,
   exportSettings,
 }: ExportBuildInput) {
-  const metadata = exportSettings.includeMetadata
+  const metadataLines = exportSettings.includeMetadata
     ? [
         `Title: ${titlePage.title || title}`,
         titlePage.writtenBy ? `Author: ${titlePage.writtenBy}` : "",
         titlePage.basedOn ? `Source: ${titlePage.basedOn}` : "",
         titlePage.draftDate ? `Draft date: ${titlePage.draftDate}` : "",
-        "",
-      ]
-        .filter(Boolean)
-        .join("\n")
-    : "";
+      ].filter(Boolean)
+    : [];
 
-  const body = blocks.map(blockToText).join("\n\n");
-  return `${metadata}${body}`;
+  const bodyLines: string[] = [];
+
+  blocks.forEach((block, blockIndex) => {
+    const normalizedType = normalizeBlockType(block.type);
+    const previousType =
+      blockIndex > 0 ? normalizeBlockType(blocks[blockIndex - 1].type) : null;
+    const currentText = block.text.replace(/\r\n/g, "\n").trimEnd();
+
+    const formattedText =
+      normalizedType === "scene_heading" ||
+      normalizedType === "character" ||
+      normalizedType === "transition" ||
+      normalizedType === "shot"
+        ? currentText.toUpperCase()
+        : normalizedType === "parenthetical"
+          ? (() => {
+              const trimmed = currentText.trim();
+              if (!trimmed) return "";
+              if (trimmed.startsWith("(") && trimmed.endsWith(")")) return trimmed;
+              return `(${trimmed.replace(/^\(+|\)+$/g, "")})`;
+            })()
+          : currentText;
+
+    const continuesDialogueFlow =
+      previousType !== null &&
+      isDialogueFlowType(normalizedType) &&
+      isDialogueFlowType(previousType);
+
+    if (
+      bodyLines.length > 0 &&
+      !continuesDialogueFlow &&
+      bodyLines[bodyLines.length - 1] !== ""
+    ) {
+      bodyLines.push("");
+    }
+
+    if (!formattedText.trim()) return;
+
+    bodyLines.push(...formattedText.split("\n"));
+  });
+
+  const body = bodyLines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+  const metadata = metadataLines.length ? `${metadataLines.join("\n")}\n\n` : "";
+  const output = `${metadata}${body}`.trimEnd();
+  return output ? `${output}\n` : "";
 }
 
 export function buildPlainText({
@@ -346,60 +396,343 @@ ${contentXml}
 </FinalDraft>`;
 }
 
+const POINTS_PER_INCH = 72;
+
+type FontMetrics = {
+  widthOfTextAtSize: (text: string, size: number) => number;
+};
+
+type PdfBlockLayout = {
+  x: number;
+  maxWidth: number;
+  align: "left" | "right";
+  uppercase: boolean;
+  bold: boolean;
+  italic: boolean;
+  beforeGap: number;
+  afterGap: number;
+};
+
+function getBlockVerticalSpacingInches(type: ScriptBlock["type"]) {
+  const normalizedType = normalizeBlockType(type);
+
+  const top =
+    normalizedType === "scene_heading"
+      ? 0.28
+      : normalizedType === "transition"
+        ? 0.24
+        : normalizedType === "shot"
+          ? 0.16
+          : normalizedType === "character"
+            ? 0.2
+            : normalizedType === "parenthetical"
+              ? 0.02
+              : normalizedType === "dialogue"
+                ? 0.01
+                : normalizedType === "action" || normalizedType === "general"
+                  ? 0.03
+                  : 0;
+
+  const bottom =
+    normalizedType === "scene_heading"
+      ? 0.1
+      : normalizedType === "transition"
+        ? 0.1
+        : normalizedType === "shot"
+          ? 0.08
+          : normalizedType === "character"
+            ? 0.02
+            : normalizedType === "parenthetical"
+              ? 0.03
+              : normalizedType === "dialogue"
+                ? 0.11
+                : normalizedType === "action" || normalizedType === "general"
+                  ? 0.05
+                  : 0;
+
+  return {
+    top: top * POINTS_PER_INCH,
+    bottom: bottom * POINTS_PER_INCH,
+  };
+}
+
+function normalizeBlockTextForPdf(block: ScriptBlock) {
+  const normalizedType = normalizeBlockType(block.type);
+  const text = block.text.replace(/\r\n/g, "\n");
+
+  if (
+    normalizedType === "scene_heading" ||
+    normalizedType === "character" ||
+    normalizedType === "transition" ||
+    normalizedType === "shot"
+  ) {
+    return text.toUpperCase();
+  }
+
+  return text;
+}
+
+function getPdfBlockLayout(
+  block: ScriptBlock,
+  format: FormatSettings,
+  left: number,
+  contentMaxWidth: number
+): PdfBlockLayout {
+  const normalizedType = normalizeBlockType(block.type);
+  const contentWidthInches = contentMaxWidth / POINTS_PER_INCH;
+
+  const characterOffsetInches = Math.max(0, format.characterIndent - format.leftMargin);
+  const dialogueOffsetInches = Math.max(0, format.dialogueIndent - format.leftMargin);
+  const parentheticalOffsetInches = Math.max(0, 3 - format.leftMargin);
+
+  const characterWidth = Math.max(
+    POINTS_PER_INCH,
+    Math.min(
+      contentMaxWidth - characterOffsetInches * POINTS_PER_INCH,
+      2.5 * POINTS_PER_INCH
+    )
+  );
+  const dialogueWidth = Math.max(
+    POINTS_PER_INCH,
+    Math.min(
+      contentMaxWidth - dialogueOffsetInches * POINTS_PER_INCH,
+      format.dialogueWidth * POINTS_PER_INCH
+    )
+  );
+  const parentheticalWidth = Math.max(
+    POINTS_PER_INCH,
+    Math.min(
+      contentMaxWidth - parentheticalOffsetInches * POINTS_PER_INCH,
+      2.5 * POINTS_PER_INCH
+    )
+  );
+
+  const spacing = getBlockVerticalSpacingInches(normalizedType);
+
+  if (normalizedType === "character") {
+    return {
+      x: left + characterOffsetInches * POINTS_PER_INCH,
+      maxWidth: characterWidth,
+      align: "left",
+      uppercase: true,
+      bold: true,
+      italic: false,
+      beforeGap: spacing.top,
+      afterGap: spacing.bottom,
+    };
+  }
+
+  if (normalizedType === "dialogue") {
+    return {
+      x: left + dialogueOffsetInches * POINTS_PER_INCH,
+      maxWidth: dialogueWidth,
+      align: "left",
+      uppercase: false,
+      bold: false,
+      italic: false,
+      beforeGap: spacing.top,
+      afterGap: spacing.bottom,
+    };
+  }
+
+  if (normalizedType === "parenthetical") {
+    return {
+      x: left + parentheticalOffsetInches * POINTS_PER_INCH,
+      maxWidth: parentheticalWidth,
+      align: "left",
+      uppercase: false,
+      bold: false,
+      italic: true,
+      beforeGap: spacing.top,
+      afterGap: spacing.bottom,
+    };
+  }
+
+  if (normalizedType === "transition") {
+    return {
+      x: left,
+      maxWidth: Math.max(contentWidthInches * POINTS_PER_INCH, POINTS_PER_INCH),
+      align: "right",
+      uppercase: true,
+      bold: true,
+      italic: false,
+      beforeGap: spacing.top,
+      afterGap: spacing.bottom,
+    };
+  }
+
+  return {
+    x: left,
+    maxWidth: Math.max(contentMaxWidth, POINTS_PER_INCH),
+    align: "left",
+    uppercase: normalizedType === "scene_heading" || normalizedType === "shot",
+    bold: normalizedType === "scene_heading" || normalizedType === "shot",
+    italic: false,
+    beforeGap: spacing.top,
+    afterGap: spacing.bottom,
+  };
+}
+
+function breakWordToWidth(
+  word: string,
+  maxWidth: number,
+  font: FontMetrics,
+  fontSize: number
+) {
+  if (!word) return [""];
+  if (font.widthOfTextAtSize(word, fontSize) <= maxWidth) return [word];
+
+  const pieces: string[] = [];
+  let currentPiece = "";
+
+  for (const char of word) {
+    const nextPiece = `${currentPiece}${char}`;
+    if (
+      currentPiece &&
+      font.widthOfTextAtSize(nextPiece, fontSize) > maxWidth
+    ) {
+      pieces.push(currentPiece);
+      currentPiece = char;
+      continue;
+    }
+    currentPiece = nextPiece;
+  }
+
+  if (currentPiece) pieces.push(currentPiece);
+  return pieces;
+}
+
+function wrapTextToWidth(
+  text: string,
+  maxWidth: number,
+  font: FontMetrics,
+  fontSize: number
+) {
+  const safeText = text.replace(/\r\n/g, "\n");
+  const sourceLines = safeText.split("\n");
+  const wrapped: string[] = [];
+
+  sourceLines.forEach((sourceLine) => {
+    if (!sourceLine.trim()) {
+      wrapped.push("");
+      return;
+    }
+
+    const words = sourceLine.split(/\s+/).filter(Boolean);
+    let currentLine = "";
+
+    words.forEach((word) => {
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (font.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+        currentLine = candidate;
+        return;
+      }
+
+      if (currentLine) {
+        wrapped.push(currentLine);
+        currentLine = "";
+      }
+
+      const pieces = breakWordToWidth(word, maxWidth, font, fontSize);
+      if (pieces.length === 0) return;
+
+      if (pieces.length === 1) {
+        currentLine = pieces[0];
+        return;
+      }
+
+      wrapped.push(...pieces.slice(0, -1));
+      currentLine = pieces[pieces.length - 1] ?? "";
+    });
+
+    wrapped.push(currentLine || "");
+  });
+
+  return wrapped.length > 0 ? wrapped : [""];
+}
+
 export async function buildPdfBlob({
   blocks,
   title,
   titlePage,
   exportSettings,
   format,
+  pageBlockIndices,
 }: PdfBuildInput) {
   const { PDFDocument, StandardFonts, rgb } = await import("pdf-lib");
 
   const pdfDoc = await PDFDocument.create();
   const courier = await pdfDoc.embedFont(StandardFonts.Courier);
   const courierBold = await pdfDoc.embedFont(StandardFonts.CourierBold);
+  const courierOblique = await pdfDoc.embedFont(StandardFonts.CourierOblique);
+  const courierBoldOblique = await pdfDoc.embedFont(
+    StandardFonts.CourierBoldOblique
+  );
 
-  const pageWidth = format.pageWidth * 72;
-  const pageHeight = format.pageHeight * 72;
-  const left = format.leftMargin * 72;
-  const right = format.rightMargin * 72;
-  const top = pageHeight - format.topMargin * 72;
-  const bottom = format.bottomMargin * 72;
-  const fontSize = format.fontSize;
-  const lineGap = fontSize * format.lineHeight;
-  const contentMaxWidth = pageWidth - left - right;
+  const safeFormat: FormatSettings = {
+    pageWidth: Number.isFinite(format.pageWidth) && format.pageWidth > 0 ? format.pageWidth : 8.5,
+    pageHeight:
+      Number.isFinite(format.pageHeight) && format.pageHeight > 0 ? format.pageHeight : 11,
+    topMargin: Number.isFinite(format.topMargin) && format.topMargin >= 0 ? format.topMargin : 1,
+    bottomMargin:
+      Number.isFinite(format.bottomMargin) && format.bottomMargin >= 0
+        ? format.bottomMargin
+        : 1,
+    leftMargin: Number.isFinite(format.leftMargin) && format.leftMargin >= 0 ? format.leftMargin : 1.5,
+    rightMargin:
+      Number.isFinite(format.rightMargin) && format.rightMargin >= 0 ? format.rightMargin : 1,
+    fontSize: Number.isFinite(format.fontSize) && format.fontSize > 0 ? format.fontSize : 12,
+    lineHeight:
+      Number.isFinite(format.lineHeight) && format.lineHeight > 0 ? format.lineHeight : 1.25,
+    characterIndent:
+      Number.isFinite(format.characterIndent) && format.characterIndent >= 0
+        ? format.characterIndent
+        : 3.5,
+    dialogueIndent:
+      Number.isFinite(format.dialogueIndent) && format.dialogueIndent >= 0
+        ? format.dialogueIndent
+        : 2.5,
+    dialogueWidth:
+      Number.isFinite(format.dialogueWidth) && format.dialogueWidth > 0
+        ? format.dialogueWidth
+        : 3.5,
+    showSceneNumbers: format.showSceneNumbers,
+  };
 
-  let page = pdfDoc.addPage([pageWidth, pageHeight]);
-  let y = top;
+  const pageWidth = safeFormat.pageWidth * POINTS_PER_INCH;
+  const pageHeight = safeFormat.pageHeight * POINTS_PER_INCH;
+  const left = safeFormat.leftMargin * POINTS_PER_INCH;
+  const right = safeFormat.rightMargin * POINTS_PER_INCH;
+  const top = pageHeight - safeFormat.topMargin * POINTS_PER_INCH;
+  const bottom = safeFormat.bottomMargin * POINTS_PER_INCH;
+  const fontSize = Math.max(12, safeFormat.fontSize);
+  const lineGap = fontSize * Math.max(1.2, safeFormat.lineHeight);
+  const contentMaxWidth = Math.max(POINTS_PER_INCH, pageWidth - left - right);
+  const pageContentHeight = Math.max(lineGap, top - bottom);
 
-  function addPage() {
-    page = pdfDoc.addPage([pageWidth, pageHeight]);
-    y = top;
-  }
+  const fontForLayout = (layout: PdfBlockLayout) => {
+    if (layout.bold && layout.italic) return courierBoldOblique;
+    if (layout.bold) return courierBold;
+    if (layout.italic) return courierOblique;
+    return courier;
+  };
 
-  function drawLine(
-    text: string,
-    x: number,
-    bold = false,
-    align: "left" | "right" = "left",
-    maxWidth = contentMaxWidth
-  ) {
-    if (y < bottom) addPage();
+  const prepareBlockForPdf = (block: ScriptBlock) => {
+    const layout = getPdfBlockLayout(block, safeFormat, left, contentMaxWidth);
+    const text = normalizeBlockTextForPdf(block);
+    const wrappingFont = fontForLayout(layout);
+    const lines = wrapTextToWidth(
+      text || "",
+      Math.max(POINTS_PER_INCH, layout.maxWidth),
+      wrappingFont,
+      fontSize
+    );
+    const height = layout.beforeGap + lines.length * lineGap + layout.afterGap;
 
-    const value = text || " ";
-    const width = (bold ? courierBold : courier).widthOfTextAtSize(value, fontSize);
-    const drawX = align === "right" ? x + Math.max(0, maxWidth - width) : x;
+    return { layout, lines, height };
+  };
 
-    page.drawText(text || " ", {
-      x: drawX,
-      y,
-      size: fontSize,
-      font: bold ? courierBold : courier,
-      color: rgb(0, 0, 0),
-    });
-
-    y -= lineGap;
-  }
+  const addContentPage = () => pdfDoc.addPage([pageWidth, pageHeight]);
 
   if (exportSettings.includeTitlePage) {
     const titlePagePdf = pdfDoc.addPage([pageWidth, pageHeight]);
@@ -456,68 +789,93 @@ export async function buildPdfBlob({
     });
   }
 
-  for (const block of blocks) {
-    const isSceneHeading = isSceneHeadingType(block.type);
-    const text =
-      isSceneHeading ||
-      block.type === "character" ||
-      block.type === "transition" ||
-      block.type === "shot"
-        ? block.text.toUpperCase()
-        : block.text;
+  const suppliedGroups = (pageBlockIndices ?? [])
+    .map((indices) =>
+      indices.filter((index) => index >= 0 && index < blocks.length)
+    )
+    .filter((indices) => indices.length > 0);
 
-    const bold =
-      isSceneHeading ||
-      block.type === "character" ||
-      block.type === "transition" ||
-      block.type === "shot";
-    const dialogueWidth = format.dialogueWidth * 72;
-    const characterWidth = Math.max(140, dialogueWidth * 0.9);
-    const parentheticalWidth = Math.max(120, dialogueWidth * 0.72);
-    const x =
-      block.type === "character"
-        ? left + (contentMaxWidth - characterWidth) / 2
-        : block.type === "dialogue"
-          ? left + (contentMaxWidth - dialogueWidth) / 2
-          : block.type === "parenthetical"
-            ? left + (contentMaxWidth - parentheticalWidth) / 2 + 12
-            : left;
+  const fallbackGroups = () => {
+    const groups: number[][] = [];
+    let current: number[] = [];
+    let currentHeight = 0;
 
-    const maxWidth =
-      block.type === "character"
-        ? characterWidth
-        : block.type === "dialogue"
-          ? dialogueWidth
-          : block.type === "parenthetical"
-            ? parentheticalWidth
-            : contentMaxWidth;
+    blocks.forEach((block, index) => {
+      const prepared = prepareBlockForPdf(block);
+      const blockHeight = Number.isFinite(prepared.height)
+        ? prepared.height
+        : lineGap;
 
-    const approxChars = Math.max(10, Math.floor(maxWidth / (fontSize * 0.6)));
-    const lines = wrapText(text || "", approxChars);
+      if (
+        current.length > 0 &&
+        currentHeight + blockHeight > pageContentHeight
+      ) {
+        groups.push(current);
+        current = [index];
+        currentHeight = blockHeight;
+        return;
+      }
 
-    if (
-      isSceneHeading ||
-      block.type === "character" ||
-      block.type === "transition" ||
-      block.type === "shot"
-    ) {
-      y -= lineGap * 0.5;
-    }
+      current.push(index);
+      currentHeight += blockHeight;
+    });
 
-    for (const line of lines.length ? lines : [""]) {
-      drawLine(
-        line,
-        x,
-        bold,
-        block.type === "transition" ? "right" : "left",
-        maxWidth
-      );
-    }
+    if (current.length > 0) groups.push(current);
+    return groups.length > 0 ? groups : [[]];
+  };
 
-    if (block.type === "dialogue" || block.type === "parenthetical") {
-      y -= lineGap * 0.4;
-    }
-  }
+  const pageGroups =
+    suppliedGroups.length > 0
+      ? suppliedGroups
+      : blocks.length > 0
+        ? fallbackGroups()
+        : [[]];
+
+  pageGroups.forEach((group) => {
+    let page = addContentPage();
+    let y = top;
+
+    group.forEach((blockIndex) => {
+      const block = blocks[blockIndex];
+      if (!block) return;
+
+      const prepared = prepareBlockForPdf(block);
+      const { layout, lines } = prepared;
+
+      y -= layout.beforeGap;
+      if (y < bottom + lineGap) {
+        page = addContentPage();
+        y = top - layout.beforeGap;
+      }
+
+      lines.forEach((line) => {
+        if (y < bottom + lineGap) {
+          page = addContentPage();
+          y = top;
+        }
+
+        const text = line || " ";
+        const drawingFont = fontForLayout(layout);
+        const width = drawingFont.widthOfTextAtSize(text, fontSize);
+        const drawX =
+          layout.align === "right"
+            ? layout.x + Math.max(0, layout.maxWidth - width)
+            : layout.x;
+
+        page.drawText(text, {
+          x: drawX,
+          y,
+          size: fontSize,
+          font: drawingFont,
+          color: rgb(0, 0, 0),
+        });
+
+        y -= lineGap;
+      });
+
+      y -= layout.afterGap;
+    });
+  });
 
   const bytes = await pdfDoc.save();
 
@@ -543,22 +901,4 @@ function escapeRtf(value: string) {
     .replaceAll("\\", "\\\\")
     .replaceAll("{", "\\{")
     .replaceAll("}", "\\}");
-}
-
-function wrapText(text: string, maxChars: number) {
-  const words = text.split(/\s+/);
-  const lines: string[] = [];
-  let current = "";
-
-  for (const word of words) {
-    if ((current + " " + word).trim().length > maxChars) {
-      lines.push(current.trim());
-      current = word;
-    } else {
-      current = `${current} ${word}`.trim();
-    }
-  }
-
-  if (current.trim()) lines.push(current.trim());
-  return lines;
 }

@@ -1083,13 +1083,21 @@ export default function ScriptEditor() {
   }
 
   async function exportPdf() {
-    const blob = await buildPdfBlob({ ...exportInput, format });
+    const blob = await buildPdfBlob({
+      ...exportInput,
+      format,
+      pageBlockIndices: visualPageBlockIndices,
+    });
     downloadBlob(`${fileBaseName()}.pdf`, blob);
     closeMenus();
   }
 
   async function printScript() {
-    const blob = await buildPdfBlob({ ...exportInput, format });
+    const blob = await buildPdfBlob({
+      ...exportInput,
+      format,
+      pageBlockIndices: visualPageBlockIndices,
+    });
     const url = URL.createObjectURL(blob);
     const printWindow = window.open(url, "_blank");
 
