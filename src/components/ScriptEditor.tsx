@@ -42,6 +42,19 @@ type MenuName =
   | "help"
   | null;
 
+type ViewMode = "normal" | "page";
+
+const VISUAL_PAGE_MAX_WIDTH_PX = 816;
+const VISUAL_PAGE_MIN_HEIGHT_PX = 1056;
+const VISUAL_PAGE_PADDING_TOP_PX = 96;
+const VISUAL_PAGE_PADDING_BOTTOM_PX = 96;
+const VISUAL_PAGE_PADDING_LEFT_PX = 144;
+const VISUAL_PAGE_PADDING_RIGHT_PX = 96;
+const VISUAL_PAGE_CONTENT_WIDTH_PX =
+  VISUAL_PAGE_MAX_WIDTH_PX -
+  VISUAL_PAGE_PADDING_LEFT_PX -
+  VISUAL_PAGE_PADDING_RIGHT_PX;
+
 function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");
@@ -113,8 +126,8 @@ export default function ScriptEditor() {
   const [productionMode, setProductionMode] = useState(false);
   const [revisionMode, setRevisionMode] = useState(false);
   const [currentRevisionColor] = useState<RevisionColor>("blue");
-  const [focusMode, setFocusMode] = useState(false);
-  const [pageScale, setPageScale] = useState(1);
+  const [focusMode] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("page");
 
   const [feedback, setFeedback] = useState(
     "Click Analyze Script to generate basic writing feedback."
@@ -296,6 +309,11 @@ export default function ScriptEditor() {
     }),
     [blocks, title, resolvedTitlePage, resolvedExportSettings]
   );
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem("pageone:view-mode", viewMode);
+  }, [viewMode]);
 
   useLayoutEffect(() => {
     const blockId = pendingFocusBlockId.current;
@@ -621,15 +639,15 @@ export default function ScriptEditor() {
   }
 
   function showCollaborationPlaceholder() {
-    alert("Collaboration coming soon.");
+    // Intentionally disabled in toolbar.
   }
 
   function showSplitPlaceholder() {
-    alert("Split view coming soon.");
+    // Intentionally disabled in toolbar.
   }
 
   function showBeatBoardPlaceholder() {
-    alert("Beat Board coming soon.");
+    // Intentionally disabled in toolbar.
   }
 
   function analyzeScript() {
@@ -797,6 +815,117 @@ export default function ScriptEditor() {
 
   const contentWidth = format.pageWidth - format.leftMargin - format.rightMargin;
 
+  function renderBlock(block: ScriptBlock, index: number) {
+    const sceneIndex = scenes.findIndex((scene) => scene.id === block.id);
+    const isActiveBlock = block.id === effectiveActiveBlockId;
+    const showRevisionBackground =
+      revisionMode &&
+      block.revisionColor !== undefined &&
+      block.revisionColor !== "none";
+
+    return (
+      <div
+        id={`block-${block.id}`}
+        key={block.id}
+        className={`group relative rounded-sm ${isActiveBlock ? "bg-blue-50/20" : ""}`}
+      >
+        {block.type !== "action" && (
+          <span
+            className="pointer-events-none absolute bottom-1 top-1 w-px"
+            style={{
+              left: "-0.12in",
+              background: elementAccent(block.type),
+            }}
+          />
+        )}
+
+        {isActiveBlock && (
+          <span
+            className="absolute bottom-1 top-1 w-1 rounded-full bg-blue-500/70"
+            style={{ left: "-0.28in" }}
+          />
+        )}
+
+        {block.type === "scene" && format.showSceneNumbers && sceneIndex >= 0 && (
+          <>
+            <span className="absolute top-0 text-xs text-zinc-500" style={{ left: "-0.55in" }}>
+              {sceneIndex + 1}.
+            </span>
+            <span className="absolute top-0 text-xs text-zinc-500" style={{ right: "-0.55in" }}>
+              {sceneIndex + 1}.
+            </span>
+          </>
+        )}
+
+        <span
+          className="absolute top-1 hidden rounded bg-zinc-100 px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-500 group-hover:block"
+          style={{ left: "-0.95in" }}
+        >
+          {block.type}
+        </span>
+
+        {block.note && (
+          <span
+            className="absolute top-7 hidden rounded bg-blue-100 px-2 py-1 text-[10px] text-blue-700 group-hover:block"
+            style={{ left: "-0.95in" }}
+          >
+            note
+          </span>
+        )}
+
+        {block.locked && (
+          <span
+            className="absolute top-13 hidden rounded bg-red-100 px-2 py-1 text-[10px] text-red-700 group-hover:block"
+            style={{ left: "-0.95in" }}
+          >
+            locked
+          </span>
+        )}
+
+        <textarea
+          value={block.text}
+          disabled={block.locked}
+          ref={(textarea) => registerTextarea(block.id, textarea)}
+          onFocus={() => setActiveBlockId(block.id)}
+          onChange={(e) => {
+            resizeTextarea(e.currentTarget);
+            updateBlock(block.id, e.target.value);
+          }}
+          onKeyDown={(e) => handleKeyDown(e, index)}
+          rows={1}
+          className="resize-none overflow-hidden rounded-sm bg-transparent outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-80"
+          style={{
+            width: block.type === "dialogue" ? `${format.dialogueWidth}in` : "100%",
+            marginLeft:
+              block.type === "character"
+                ? `${format.characterIndent - format.leftMargin}in`
+                : block.type === "dialogue"
+                ? `${format.dialogueIndent - format.leftMargin}in`
+                : "0in",
+            marginTop:
+              block.type === "scene"
+                ? "0.25in"
+                : block.type === "character"
+                ? "0.22in"
+                : "0in",
+            marginBottom: block.type === "dialogue" ? "0.12in" : "0in",
+            fontWeight:
+              block.type === "scene" || block.type === "character" ? 700 : 400,
+            textTransform:
+              block.type === "scene" || block.type === "character" ? "uppercase" : "none",
+            fontFamily: '"Courier Prime", Courier, monospace',
+            fontSize: `${format.fontSize}pt`,
+            lineHeight: format.lineHeight,
+            background: showRevisionBackground
+              ? revisionBackground(block.revisionColor)
+              : elementBackground(block.type, isActiveBlock),
+          }}
+          placeholder={block.type === "scene" ? "SCENE HEADING" : block.type.toUpperCase()}
+        />
+      </div>
+    );
+  }
+
   return (
     <AppLayout showSaveStatus contentClassName="px-0 py-0 sm:px-0 sm:py-0">
       <div
@@ -850,18 +979,24 @@ export default function ScriptEditor() {
 
           {activeMenu === "view" && (
             <Dropdown left={160}>
-              <DropdownItem label={showNavigator ? "Hide Navigator" : "Show Navigator"} helper="Toggle left scene panel" onClick={() => setShowNavigator(!showNavigator)} />
-              <DropdownItem label={showRightPanel ? "Hide Tools Panel" : "Show Tools Panel"} helper="Toggle right stats/feedback panel" onClick={() => setShowRightPanel(!showRightPanel)} />
-              <DropdownItem label={focusMode ? "Exit Focus Mode" : "Focus Mode"} helper="Hide side panels" onClick={() => setFocusMode(!focusMode)} />
-              <Divider />
-              <DropdownItem label="Zoom In" helper="Increase page scale" onClick={() => setPageScale((v) => Math.min(1.35, v + 0.05))} />
-              <DropdownItem label="Zoom Out" helper="Decrease page scale" onClick={() => setPageScale((v) => Math.max(0.75, v - 0.05))} />
-              <DropdownItem label="Reset Zoom" helper="100%" onClick={() => setPageScale(1)} />
-              <Divider />
-              <DropdownItem label="Writing Stats" helper="Show stats panel" onClick={() => setRightPanelMode("stats")} />
-              <DropdownItem label="Feedback Panel" helper="Show feedback panel" onClick={() => setRightPanelMode("feedback")} />
-              <DropdownItem label="Notes Panel" helper="Show element notes" onClick={() => setRightPanelMode("notes")} />
-              <DropdownItem label="Suggestions Panel" helper="Show smart next steps" onClick={() => setRightPanelMode("suggestions")} />
+              <DropdownItem
+                label={viewMode === "normal" ? "Normal View (Active)" : "Normal View"}
+                helper="Continuous writing canvas"
+                active={viewMode === "normal"}
+                onClick={() => {
+                  setViewMode("normal");
+                  closeMenus();
+                }}
+              />
+              <DropdownItem
+                label={viewMode === "page" ? "Page View (Active)" : "Page View"}
+                helper="Paper-style pages with visible boundaries"
+                active={viewMode === "page"}
+                onClick={() => {
+                  setViewMode("page");
+                  closeMenus();
+                }}
+              />
             </Dropdown>
           )}
 
@@ -880,7 +1015,13 @@ export default function ScriptEditor() {
           {activeMenu === "tools" && (
             <Dropdown left={270}>
               <DropdownItem label="Format Settings" helper="Margins, spacing, scene numbers" onClick={() => setShowFormatSettings(true)} />
-              <DropdownItem label="Analyze Script" helper="Generate basic feedback" onClick={analyzeScript} />
+              <DropdownItem
+                label="Analyze Script"
+                helper="Feedback tools are coming soon"
+                disabled
+                titleOverride="Analyze Script (Coming soon)"
+                onClick={analyzeScript}
+              />
               <DropdownItem label="Format Cleanup" helper="Fix common casing" onClick={formatCleanup} />
               <DropdownItem label="Smart Suggestions" helper="Open suggested next elements" onClick={() => setRightPanelMode("suggestions")} />
               <DropdownItem label="Show Writing Stats" helper="Open stats panel" onClick={() => setRightPanelMode("stats")} />
@@ -930,6 +1071,11 @@ export default function ScriptEditor() {
           isShowHideActive={showRightPanel}
           isNavigatorActive={showNavigator}
           isFeedbackActive={showRightPanel && rightPanelMode === "feedback"}
+          isPageViewActive={viewMode === "page"}
+          collaborationDisabled
+          splitDisabled
+          beatBoardDisabled
+          feedbackDisabled
         />
       </header>
 
@@ -965,146 +1111,83 @@ export default function ScriptEditor() {
         )}
 
         <main className="min-h-[calc(100vh-148px)] overflow-x-auto overflow-y-auto px-3 py-4 font-sans sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-          <div className="mx-auto mb-4 flex min-w-max items-center justify-between gap-3" style={{ width: `${format.pageWidth * pageScale}in` }}>
-            <input
-              value={title}
-              onChange={(e) => updateTitle(e.target.value)}
-              className="min-w-0 w-full bg-transparent text-lg font-bold outline-none"
-              placeholder="Untitled Script"
-            />
+          {viewMode === "page" ? (
+            <div className="mx-auto w-full max-w-[960px]">
+              <section
+                className="mx-auto w-full rounded-[2px] border border-zinc-300 bg-white text-black shadow-[0_4px_12px_rgba(15,23,42,0.08)]"
+                style={{
+                  width: `${VISUAL_PAGE_MAX_WIDTH_PX}px`,
+                  minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
+                  paddingTop: `${VISUAL_PAGE_PADDING_TOP_PX}px`,
+                  paddingBottom: `${VISUAL_PAGE_PADDING_BOTTOM_PX}px`,
+                  paddingLeft: `${VISUAL_PAGE_PADDING_LEFT_PX}px`,
+                  paddingRight: `${VISUAL_PAGE_PADDING_RIGHT_PX}px`,
+                  fontFamily: '"Courier Prime", Courier, monospace',
+                  fontSize: `${format.fontSize}pt`,
+                  lineHeight: format.lineHeight,
+                }}
+              >
+                <div className="mb-8 text-center">
+                  <input
+                    value={title}
+                    onChange={(e) => updateTitle(e.target.value)}
+                    className="mx-auto block w-full max-w-[480px] bg-transparent text-center text-[11px] uppercase tracking-[0.14em] text-zinc-500 outline-none"
+                    placeholder="UNTITLED SCRIPT"
+                  />
+                </div>
 
-            <span className="shrink-0 text-xs text-zinc-500">
-              {format.pageWidth}" × {format.pageHeight}"
-            </span>
-          </div>
-
-          <div
-            style={{
-              transform: `scale(${pageScale})`,
-              transformOrigin: "top center",
-            }}
-          >
-            <div
-              className="mx-auto rounded-sm bg-white text-black shadow-xl"
-              style={{
-                width: `${format.pageWidth}in`,
-                minHeight: `${format.pageHeight}in`,
-                paddingTop: `${format.topMargin}in`,
-                paddingBottom: `${format.bottomMargin}in`,
-                paddingLeft: `${format.leftMargin}in`,
-                paddingRight: `${format.rightMargin}in`,
-                fontFamily: '"Courier Prime", Courier, monospace',
-                fontSize: `${format.fontSize}pt`,
-                lineHeight: format.lineHeight,
-              }}
-            >
-              <div style={{ width: `${contentWidth}in` }}>
-                {blocks.map((block, index) => {
-                  const sceneIndex = scenes.findIndex((scene) => scene.id === block.id);
-                  const isActiveBlock = block.id === effectiveActiveBlockId;
-                  const showRevisionBackground =
-                    revisionMode &&
-                    block.revisionColor !== undefined &&
-                    block.revisionColor !== "none";
-
-                  return (
-                    <div
-                      id={`block-${block.id}`}
-                      key={block.id}
-                      className={`group relative rounded-sm ${
-                        isActiveBlock ? "bg-blue-50/20" : ""
-                      }`}
-                    >
-                      {block.type !== "action" && (
-                        <span
-                          className="pointer-events-none absolute bottom-1 top-1 w-px"
-                          style={{
-                            left: "-0.12in",
-                            background: elementAccent(block.type),
-                          }}
-                        />
-                      )}
-
-                      {isActiveBlock && (
-                        <span
-                          className="absolute bottom-1 top-1 w-1 rounded-full bg-blue-500/70"
-                          style={{ left: "-0.28in" }}
-                        />
-                      )}
-
-                      {block.type === "scene" && format.showSceneNumbers && sceneIndex >= 0 && (
-                        <>
-                          <span className="absolute top-0 text-xs text-zinc-500" style={{ left: "-0.55in" }}>
-                            {sceneIndex + 1}.
-                          </span>
-                          <span className="absolute top-0 text-xs text-zinc-500" style={{ right: "-0.55in" }}>
-                            {sceneIndex + 1}.
-                          </span>
-                        </>
-                      )}
-
-                      <span className="absolute top-1 hidden rounded bg-zinc-100 px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-500 group-hover:block" style={{ left: "-0.95in" }}>
-                        {block.type}
-                      </span>
-
-                      {block.note && (
-                        <span className="absolute top-7 hidden rounded bg-blue-100 px-2 py-1 text-[10px] text-blue-700 group-hover:block" style={{ left: "-0.95in" }}>
-                          note
-                        </span>
-                      )}
-
-                      {block.locked && (
-                        <span className="absolute top-13 hidden rounded bg-red-100 px-2 py-1 text-[10px] text-red-700 group-hover:block" style={{ left: "-0.95in" }}>
-                          locked
-                        </span>
-                      )}
-
-                      <textarea
-                        value={block.text}
-                        disabled={block.locked}
-                        ref={(textarea) => registerTextarea(block.id, textarea)}
-                        onFocus={() => setActiveBlockId(block.id)}
-                        onChange={(e) => {
-                          resizeTextarea(e.currentTarget);
-                          updateBlock(block.id, e.target.value);
-                        }}
-                        onKeyDown={(e) => handleKeyDown(e, index)}
-                        rows={1}
-                        className="resize-none overflow-hidden rounded-sm bg-transparent outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-80"
-                        style={{
-                          width: block.type === "dialogue" ? `${format.dialogueWidth}in` : "100%",
-                          marginLeft:
-                            block.type === "character"
-                              ? `${format.characterIndent - format.leftMargin}in`
-                              : block.type === "dialogue"
-                              ? `${format.dialogueIndent - format.leftMargin}in`
-                              : "0in",
-                          marginTop:
-                            block.type === "scene"
-                              ? "0.25in"
-                              : block.type === "character"
-                              ? "0.22in"
-                              : "0in",
-                          marginBottom: block.type === "dialogue" ? "0.12in" : "0in",
-                          fontWeight:
-                            block.type === "scene" || block.type === "character" ? 700 : 400,
-                          textTransform:
-                            block.type === "scene" || block.type === "character" ? "uppercase" : "none",
-                          fontFamily: '"Courier Prime", Courier, monospace',
-                          fontSize: `${format.fontSize}pt`,
-                          lineHeight: format.lineHeight,
-                          background: showRevisionBackground
-                            ? revisionBackground(block.revisionColor)
-                            : elementBackground(block.type, isActiveBlock),
-                        }}
-                        placeholder={block.type === "scene" ? "SCENE HEADING" : block.type.toUpperCase()}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+                <div className="mx-auto space-y-1" style={{ width: `${VISUAL_PAGE_CONTENT_WIDTH_PX}px` }}>
+                  {blocks.map((block, index) => renderBlock(block, index))}
+                </div>
+              </section>
             </div>
-          </div>
+          ) : (
+            <>
+              <div
+                className="mx-auto mb-4 flex min-w-max items-center justify-between gap-3"
+                style={{
+                  width: `${format.pageWidth}in`,
+                  maxWidth: `${VISUAL_PAGE_MAX_WIDTH_PX}px`,
+                }}
+              >
+                <input
+                  value={title}
+                  onChange={(e) => updateTitle(e.target.value)}
+                  className="min-w-0 w-full bg-transparent text-lg font-bold outline-none"
+                  placeholder="Untitled Script"
+                />
+
+                <span className="shrink-0 text-xs text-zinc-500">
+                  {format.pageWidth}" × {format.pageHeight}"
+                </span>
+              </div>
+
+              <section
+                style={{
+                  width: `${format.pageWidth}in`,
+                  maxWidth: `${VISUAL_PAGE_MAX_WIDTH_PX}px`,
+                }}
+                className="mx-auto w-full text-black"
+              >
+              <div
+                className="text-black"
+                style={{
+                  paddingTop: `${format.topMargin}in`,
+                  paddingBottom: `${format.bottomMargin}in`,
+                  paddingLeft: `${format.leftMargin}in`,
+                  paddingRight: `${format.rightMargin}in`,
+                  fontFamily: '"Courier Prime", Courier, monospace',
+                  fontSize: `${format.fontSize}pt`,
+                  lineHeight: format.lineHeight,
+                }}
+              >
+                <div style={{ width: `${contentWidth}in` }}>
+                  {blocks.map((block, index) => renderBlock(block, index))}
+                </div>
+              </div>
+              </section>
+            </>
+          )}
         </main>
 
         {showRightPanel && !focusMode && (
@@ -1113,7 +1196,13 @@ export default function ScriptEditor() {
           >
             <div className="mb-4 grid grid-cols-2 gap-2 rounded border border-zinc-200 bg-white p-1 shadow-sm">
               <PanelButton label="Stats" active={rightPanelMode === "stats"} onClick={() => setRightPanelMode("stats")} />
-              <PanelButton label="Feedback" active={rightPanelMode === "feedback"} onClick={() => setRightPanelMode("feedback")} />
+              <PanelButton
+                label="Feedback"
+                active={rightPanelMode === "feedback"}
+                onClick={() => setRightPanelMode("feedback")}
+                disabled
+                title="Feedback (Coming soon)"
+              />
               <PanelButton label="Notes" active={rightPanelMode === "notes"} onClick={() => setRightPanelMode("notes")} />
               <PanelButton label="Suggest" active={rightPanelMode === "suggestions"} onClick={() => setRightPanelMode("suggestions")} />
             </div>
@@ -1366,14 +1455,32 @@ function Dropdown({ left, children }: { left: number; children: ReactNode }) {
 function DropdownItem({
   label,
   helper,
+  active = false,
+  disabled = false,
+  titleOverride,
   onClick,
 }: {
   label: string;
   helper?: string;
+  active?: boolean;
+  disabled?: boolean;
+  titleOverride?: string;
   onClick: () => void;
 }) {
   return (
-    <button onClick={onClick} className="block w-full px-3 py-2 text-left font-sans hover:bg-zinc-50">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={titleOverride ?? label}
+      className={`block w-full px-3 py-2 text-left font-sans transition ${
+        active
+          ? "bg-blue-50 text-blue-800"
+          : "hover:bg-zinc-50"
+      } ${
+        disabled ? "cursor-not-allowed text-zinc-400 hover:bg-transparent" : ""
+      }`}
+    >
       <span className="block font-medium">{label}</span>
       {helper && <span className="block text-[10px] text-zinc-500">{helper}</span>}
     </button>
@@ -1397,17 +1504,24 @@ function PanelButton({
   label,
   active,
   onClick,
+  disabled = false,
+  title,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
+  disabled?: boolean;
+  title?: string;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      disabled={disabled}
+      title={title ?? label}
       className={`rounded px-3 py-1.5 text-xs font-bold transition ${
         active ? "bg-zinc-900 text-white shadow-sm" : "text-zinc-600 hover:bg-zinc-50"
-      }`}
+      } ${disabled ? "cursor-not-allowed opacity-50 hover:bg-transparent" : ""}`}
     >
       {label}
     </button>

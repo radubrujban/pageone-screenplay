@@ -30,8 +30,11 @@ type ScriptToolbarProps = {
   isShowHideActive: boolean;
   isNavigatorActive: boolean;
   isFeedbackActive: boolean;
+  isPageViewActive: boolean;
+  collaborationDisabled?: boolean;
   splitDisabled?: boolean;
   beatBoardDisabled?: boolean;
+  feedbackDisabled?: boolean;
 };
 
 type ToolbarButtonProps = {
@@ -40,6 +43,8 @@ type ToolbarButtonProps = {
   active?: boolean;
   disabled?: boolean;
   onClick: () => void;
+  compact?: boolean;
+  titleOverride?: string;
 };
 
 function ToolbarButton({
@@ -48,24 +53,32 @@ function ToolbarButton({
   active = false,
   disabled = false,
   onClick,
+  compact = false,
+  titleOverride,
 }: ToolbarButtonProps) {
   return (
     <button
       type="button"
+      title={titleOverride ?? label}
+      aria-label={label}
       disabled={disabled}
       onClick={(event) => {
         event.stopPropagation();
         if (disabled) return;
         onClick();
       }}
-      className={`flex h-12 min-w-[82px] flex-col items-center justify-center rounded-md border px-2 text-[11px] font-medium leading-tight transition ${
+      className={`flex items-center justify-center rounded-md border border-transparent transition ${
         active
-          ? "border-zinc-300 bg-blue-50 text-zinc-900"
-          : "border-transparent bg-transparent text-zinc-700 hover:border-zinc-200 hover:bg-zinc-100"
+          ? "bg-blue-50 text-zinc-900"
+          : "text-zinc-600 hover:bg-zinc-200/80 hover:text-zinc-900"
+      } ${
+        compact
+          ? "h-8 w-8"
+          : "h-8 gap-1 px-2.5 text-xs font-medium"
       } disabled:cursor-not-allowed disabled:text-zinc-400`}
     >
-      <Icon className="mb-1 h-4 w-4" />
-      <span>{label}</span>
+      <Icon className="h-4 w-4 shrink-0" />
+      {!compact && <span>{label}</span>}
     </button>
   );
 }
@@ -87,53 +100,73 @@ export default function ScriptToolbar({
   isShowHideActive,
   isNavigatorActive,
   isFeedbackActive,
+  isPageViewActive,
+  collaborationDisabled = true,
   splitDisabled = true,
   beatBoardDisabled = true,
+  feedbackDisabled = true,
 }: ScriptToolbarProps) {
   return (
-    <div className="border-b border-zinc-200 bg-zinc-100/95">
+    <div className="border-b border-zinc-300 bg-zinc-100">
       <div
-        className="flex min-h-14 items-center gap-2 overflow-x-auto px-3 py-2 sm:px-4"
+        className="flex h-13 items-center gap-2 overflow-x-auto px-3 sm:px-4"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5 rounded-md border border-zinc-300 bg-zinc-50 p-0.5">
           <ToolbarButton
             label="Collaboration"
             icon={Users}
             onClick={onCollaboration}
+            disabled={collaborationDisabled}
+            titleOverride="Collaboration (Coming soon)"
+            compact
           />
           <ToolbarButton
             label="Split"
             icon={PanelsLeftRight}
             onClick={onSplit}
             disabled={splitDisabled}
+            titleOverride="Split (Coming soon)"
+            compact
           />
-          <ToolbarButton label="Views" icon={PanelsTopLeft} onClick={onViews} />
+          <ToolbarButton
+            label="Views"
+            icon={PanelsTopLeft}
+            onClick={onViews}
+            active={isPageViewActive}
+            titleOverride={
+              isPageViewActive
+                ? "Views (Page View active)"
+                : "Views (Normal View active)"
+            }
+            compact
+          />
           <ToolbarButton
             label="Beat Board"
             icon={LayoutGrid}
             onClick={onBeatBoard}
             disabled={beatBoardDisabled}
-          />
-          <ToolbarButton
-            label="Title Page"
-            icon={FileText}
-            onClick={onTitlePage}
+            titleOverride="Beat Board (Coming soon)"
+            compact
           />
         </div>
 
-        <div className="mx-1 flex min-w-[260px] items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 py-2 shadow-sm">
-          <div className="min-w-0 flex-1">
+        <div className="mx-auto flex min-w-[260px] items-center gap-2 rounded-md border border-zinc-300 bg-white px-2.5 py-1.5">
+          <div className="min-w-0 max-w-[220px] flex-1">
             <p className="truncate text-sm font-semibold text-zinc-900">
               {title || "Untitled Script"}
             </p>
+            <p className="mt-0.5 text-[10px] uppercase tracking-[0.12em] text-zinc-500">
+              {isPageViewActive ? "Page View" : "Normal View"}
+            </p>
           </div>
           <select
+            title="Element Type"
             value={activeElementType}
             onChange={(event) =>
               onChangeElementType(event.target.value as ScriptBlock["type"])
             }
-            className="rounded-md border border-zinc-300 bg-zinc-50 px-2 py-1 text-xs text-zinc-800"
+            className="h-7 w-32 rounded border border-zinc-300 bg-zinc-50 px-2 text-xs text-zinc-800"
           >
             <option value="scene">Scene</option>
             <option value="action">Action</option>
@@ -142,9 +175,14 @@ export default function ScriptToolbar({
           </select>
         </div>
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1 rounded-md border border-zinc-300 bg-zinc-50 p-0.5">
           <ToolbarButton
-            label="Writing Stats"
+            label="Title Page"
+            icon={FileText}
+            onClick={onTitlePage}
+          />
+          <ToolbarButton
+            label="Stats"
             icon={BarChart3}
             onClick={onWritingStats}
             active={isStatsActive}
@@ -166,8 +204,10 @@ export default function ScriptToolbar({
             icon={MessageCircle}
             onClick={onFeedback}
             active={isFeedbackActive}
+            disabled={feedbackDisabled}
+            titleOverride="Feedback (Coming soon)"
           />
-          <div className="ml-2 rounded-md border border-zinc-200 bg-white px-3 py-2">
+          <div className="ml-1 rounded border border-zinc-200 bg-white px-2 py-1">
             <SaveStatus />
           </div>
         </div>
