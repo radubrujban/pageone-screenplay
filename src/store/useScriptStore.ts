@@ -77,6 +77,14 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
       session: null,
       userId: null,
       authReady: true,
+      blocks: [],
+      scriptId: null,
+      title: "Untitled Script",
+      titlePage: defaultTitlePage("Untitled Script"),
+      saveStatus:
+        typeof navigator !== "undefined" && !navigator.onLine
+          ? "offline"
+          : "saved",
     }),
   setScriptId: (id) => set({ scriptId: id }),
   setTitle: (title) => set({ title }),

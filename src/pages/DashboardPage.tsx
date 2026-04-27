@@ -35,6 +35,7 @@ export default function DashboardPage() {
   const authReady = useScriptStore((state) => state.authReady);
   const authUserId = useScriptStore((state) => state.userId);
   const authSession = useScriptStore((state) => state.session);
+  const signOut = useScriptStore((state) => state.signOut);
   const setSaveStatus = useScriptStore((state) => state.setSaveStatus);
   const navigate = useNavigate();
 
@@ -52,6 +53,10 @@ export default function DashboardPage() {
   );
 
   const newestScript = recentScripts[0] ?? null;
+
+  function getActiveUserId() {
+    return userId ?? authUserId ?? authSession?.user?.id ?? null;
+  }
 
   async function fetchScripts() {
     const id = authUserId ?? authSession?.user?.id ?? null;
@@ -147,7 +152,7 @@ export default function DashboardPage() {
   }, [authReady, authSession?.user?.id, authUserId, navigate, setSaveStatus]);
 
   async function createNewScript() {
-    let currentUserId = userId;
+    let currentUserId = getActiveUserId();
 
     if (!currentUserId) {
       currentUserId = authUserId ?? authSession?.user?.id ?? null;
@@ -187,7 +192,7 @@ export default function DashboardPage() {
     });
 
     if (navigator.onLine) {
-      await supabase.from("scripts").insert({
+      const { error } = await supabase.from("scripts").insert({
         id: newId,
         user_id: currentUserId,
         title: "Untitled Script",
@@ -195,6 +200,13 @@ export default function DashboardPage() {
         title_page: titlePage,
         updated_at: updatedAt,
       });
+
+      if (error) {
+        setSaveStatus("failed");
+        alert("Could not create script right now. Please try again.");
+        return;
+      }
+
       setSaveStatus("saved");
     } else {
       setSaveStatus("offline");
@@ -206,6 +218,12 @@ export default function DashboardPage() {
   async function deleteScript(id: string) {
     const confirmed = window.confirm("Delete this script? This cannot be undone.");
     if (!confirmed) return;
+    const currentUserId = getActiveUserId();
+
+    if (!currentUserId) {
+      navigate("/login");
+      return;
+    }
 
     if (!navigator.onLine) {
       setSaveStatus("offline");
@@ -213,12 +231,29 @@ export default function DashboardPage() {
       return;
     }
 
-    await supabase.from("scripts").delete().eq("id", id);
-    fetchScripts();
+    const { error } = await supabase
+      .from("scripts")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", currentUserId);
+
+    if (error) {
+      setSaveStatus("failed");
+      alert("Could not delete this script right now.");
+      return;
+    }
+
+    await fetchScripts();
   }
 
   async function renameScript(id: string, newTitle: string) {
     const title = newTitle.trim() || "Untitled Script";
+    const currentUserId = getActiveUserId();
+
+    if (!currentUserId) {
+      navigate("/login");
+      return;
+    }
 
     if (!navigator.onLine) {
       setSaveStatus("offline");
@@ -226,14 +261,21 @@ export default function DashboardPage() {
       return;
     }
 
-    await supabase
+    const { error } = await supabase
       .from("scripts")
       .update({ title })
-      .eq("id", id);
+      .eq("id", id)
+      .eq("user_id", currentUserId);
+
+    if (error) {
+      setSaveStatus("failed");
+      alert("Could not rename this script right now.");
+      return;
+    }
 
     setRenamingScript(null);
     setRenameTitle("");
-    fetchScripts();
+    await fetchScripts();
   }
 
   function startRename(script: Script) {
@@ -256,6 +298,18 @@ export default function DashboardPage() {
     navigate(`/script/${newestScript.id}`);
   }
 
+  async function handleLogout() {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setScripts([]);
+      setUserId(null);
+      navigate("/login", { replace: true });
+    }
+  }
+
   return (
     <AppLayout>
       <div className="relative min-h-[calc(100vh-56px)] overflow-x-hidden bg-[#fbf8f2] text-zinc-950">
@@ -265,12 +319,20 @@ export default function DashboardPage() {
               <p className="text-[9px] font-medium uppercase tracking-[0.28em] text-zinc-500">
                 PageOne
               </p>
-              <button
-                onClick={() => setAboutOpen(true)}
-                className="text-[9px] font-medium uppercase tracking-[0.28em] text-zinc-500 transition hover:text-zinc-700"
-              >
-                about
-              </button>
+              <div className="flex items-center gap-5">
+                <button
+                  onClick={() => setAboutOpen(true)}
+                  className="text-[9px] font-medium uppercase tracking-[0.28em] text-zinc-500 transition hover:text-zinc-700"
+                >
+                  about
+                </button>
+                <button
+                  onClick={() => void handleLogout()}
+                  className="text-[9px] font-medium uppercase tracking-[0.28em] text-zinc-500 transition hover:text-zinc-700"
+                >
+                  Log Out
+                </button>
+              </div>
             </div>
 
             <div className="relative mt-8">

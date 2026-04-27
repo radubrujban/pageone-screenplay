@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useScriptStore } from "../store/useScriptStore";
 import ScriptEditor from "../components/ScriptEditor";
-import { cacheRemoteScript, getCachedScript } from "../lib/db";
+import { cacheRemoteScript, getCachedScriptByUser } from "../lib/db";
 import AppLayout from "../components/AppLayout";
 import type { TitlePageData } from "../lib/screenplayFormat";
 
@@ -26,7 +26,7 @@ function resolveTitlePage(
 export default function ScriptPage() {
   const params = useParams();
   const id = params.id ?? null;
-  const [offlineUnavailable, setOfflineUnavailable] = useState(false);
+  const [blockedMessage, setBlockedMessage] = useState<string | null>(null);
 
   const {
     setBlocks,
@@ -35,6 +35,9 @@ export default function ScriptPage() {
     setTitlePage,
     setSaveStatus,
   } = useScriptStore();
+  const userId = useScriptStore((state) => state.userId);
+  const sessionUserId = useScriptStore((state) => state.session?.user?.id ?? null);
+  const activeUserId = userId ?? sessionUserId;
 
   useEffect(() => {
     if (!id) return;
@@ -42,14 +45,16 @@ export default function ScriptPage() {
     let cancelled = false;
 
     async function loadScript() {
-      setOfflineUnavailable(false);
-      setScriptId(scriptId);
-      const cached = await getCachedScript(scriptId);
+      setBlockedMessage(null);
+      const cached = activeUserId
+        ? await getCachedScriptByUser(scriptId, activeUserId)
+        : undefined;
 
       if (cancelled) return;
 
       if (cached) {
         const cachedTitle = cached.title || "Untitled Script";
+        setScriptId(scriptId);
         setBlocks(cached.blocks || []);
         setTitle(cachedTitle);
         setTitlePage(resolveTitlePage(cachedTitle, cached.titlePage));
@@ -62,12 +67,25 @@ export default function ScriptPage() {
         setSaveStatus("offline");
 
         if (!cached) {
+          setScriptId(null);
           setBlocks([]);
           setTitle("Untitled Script");
           setTitlePage(resolveTitlePage("Untitled Script"));
-          setOfflineUnavailable(true);
+          setBlockedMessage(
+            "This script is not available offline yet. Reconnect once to cache it."
+          );
         }
 
+        return;
+      }
+
+      if (!activeUserId) {
+        setScriptId(null);
+        setBlocks([]);
+        setTitle("Untitled Script");
+        setTitlePage(resolveTitlePage("Untitled Script"));
+        setSaveStatus("failed");
+        setBlockedMessage("Please sign in again to load this script.");
         return;
       }
 
@@ -76,7 +94,8 @@ export default function ScriptPage() {
           .from("scripts")
           .select("*")
           .eq("id", scriptId)
-          .single();
+          .eq("user_id", activeUserId)
+          .maybeSingle();
 
         if (cancelled) return;
 
@@ -90,6 +109,7 @@ export default function ScriptPage() {
             remoteTitle,
             (data.title_page ?? data.titlePage) as Partial<TitlePageData> | null
           );
+          setScriptId(scriptId);
           setBlocks(data.blocks || []);
           setTitle(remoteTitle);
           setTitlePage(remoteTitlePage);
@@ -97,12 +117,22 @@ export default function ScriptPage() {
 
           await cacheRemoteScript({
             id: data.id,
-            userId: data.user_id || "",
+            userId: activeUserId,
             title: remoteTitle,
             blocks: data.blocks,
             titlePage: remoteTitlePage,
             updatedAt: data.updated_at ?? Date.now(),
           });
+          return;
+        }
+
+        if (!cached) {
+          setScriptId(null);
+          setBlocks([]);
+          setTitle("Untitled Script");
+          setTitlePage(resolveTitlePage("Untitled Script"));
+          setSaveStatus("failed");
+          setBlockedMessage("This script does not exist or you do not have access.");
         }
       } catch (error) {
         console.error(error);
@@ -114,10 +144,12 @@ export default function ScriptPage() {
           return;
         }
 
+        setScriptId(null);
         setBlocks([]);
         setTitle("Untitled Script");
         setTitlePage(resolveTitlePage("Untitled Script"));
         setSaveStatus(navigator.onLine ? "failed" : "offline");
+        setBlockedMessage("Unable to load this script right now. Please try again.");
       }
     }
 
@@ -126,14 +158,22 @@ export default function ScriptPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, setBlocks, setSaveStatus, setScriptId, setTitle, setTitlePage]);
+  }, [
+    activeUserId,
+    id,
+    setBlocks,
+    setSaveStatus,
+    setScriptId,
+    setTitle,
+    setTitlePage,
+  ]);
 
-  if (offlineUnavailable) {
+  if (blockedMessage) {
     return (
       <AppLayout>
         <div className="flex min-h-[60vh] items-center justify-center text-center">
           <p className="max-w-md text-sm leading-6 text-zinc-600">
-            This script is not available offline yet. Reconnect once to cache it.
+            {blockedMessage}
           </p>
         </div>
       </AppLayout>

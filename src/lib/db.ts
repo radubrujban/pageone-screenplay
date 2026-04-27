@@ -125,6 +125,13 @@ export async function getCachedScript(id: string) {
   return db.scripts.get(id);
 }
 
+export async function getCachedScriptByUser(id: string, userId: string) {
+  const script = await db.scripts.get(id);
+  if (!script) return undefined;
+  if (script.userId !== userId) return undefined;
+  return script;
+}
+
 export async function getCachedScriptsByUser(userId: string) {
   const scripts = await db.scripts.where("userId").equals(userId).toArray();
   return scripts.sort((a, b) => b.updatedAt - a.updatedAt);

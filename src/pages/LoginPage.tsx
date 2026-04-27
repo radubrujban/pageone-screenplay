@@ -85,7 +85,7 @@ export default function LoginPage() {
     setAuthAction("signup");
     setMessage("");
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
@@ -94,6 +94,12 @@ export default function LoginPage() {
       setMessageType("error");
       setMessage(error.message);
       setAuthAction(null);
+      return;
+    }
+
+    if (data.session?.user?.id) {
+      setUserId(data.session.user.id);
+      navigate("/dashboard");
       return;
     }
 
