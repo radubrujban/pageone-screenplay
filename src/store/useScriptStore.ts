@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Session } from "@supabase/supabase-js";
 import type { ScriptBlock } from "../types/script";
+import type { TitlePageData } from "../lib/screenplayFormat";
 import { supabase } from "../lib/supabase";
 import {
   cacheScript,
@@ -21,6 +22,7 @@ interface ScriptState {
   session: Session | null;
   authReady: boolean;
   title: string;
+  titlePage: TitlePageData;
   saveStatus: SaveStatusValue;
 
   setBlocks: (blocks: ScriptBlock[]) => void;
@@ -30,12 +32,25 @@ interface ScriptState {
   clearAuth: () => void;
   setScriptId: (id: string | null) => void;
   setTitle: (title: string) => void;
+  setTitlePage: (
+    updater: TitlePageData | ((current: TitlePageData) => TitlePageData)
+  ) => void;
   setSaveStatus: (status: SaveStatusValue) => void;
   markUnsynced: () => void;
 
   saveScript: () => Promise<void>;
   syncUnsyncedScripts: (forcedUserId?: string | null) => Promise<void>;
   signOut: () => Promise<void>;
+}
+
+function defaultTitlePage(title = ""): TitlePageData {
+  return {
+    title,
+    writtenBy: "",
+    basedOn: "",
+    contact: "",
+    draftDate: new Date().toLocaleDateString(),
+  };
 }
 
 export const useScriptStore = create<ScriptState>((set, get) => ({
@@ -45,6 +60,7 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
   session: null,
   authReady: false,
   title: "Untitled Script",
+  titlePage: defaultTitlePage("Untitled Script"),
   saveStatus:
     typeof navigator !== "undefined" && !navigator.onLine ? "offline" : "saved",
 
@@ -64,6 +80,13 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
     }),
   setScriptId: (id) => set({ scriptId: id }),
   setTitle: (title) => set({ title }),
+  setTitlePage: (updater) =>
+    set((state) => ({
+      titlePage:
+        typeof updater === "function"
+          ? updater(state.titlePage)
+          : updater,
+    })),
   setSaveStatus: (status) => set({ saveStatus: status }),
   markUnsynced: () =>
     set({
@@ -74,7 +97,7 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
     }),
 
   saveScript: async () => {
-    const { blocks, scriptId, userId, title } = get();
+    const { blocks, scriptId, userId, title, titlePage } = get();
 
     if (!scriptId || !userId) return;
 
@@ -85,6 +108,7 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
       userId,
       title: title || "Untitled Script",
       blocks,
+      titlePage,
       updatedAt,
       unsynced: true,
     });
@@ -101,6 +125,7 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
       user_id: userId,
       title: title || "Untitled Script",
       blocks,
+      title_page: titlePage,
       updated_at: updatedAt,
     });
 
@@ -114,6 +139,7 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
       userId,
       title: title || "Untitled Script",
       blocks,
+      titlePage,
       updatedAt,
       unsynced: false,
     });
@@ -151,6 +177,7 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
         user_id: activeUserId,
         title: script.title || "Untitled Script",
         blocks: script.blocks,
+        title_page: script.titlePage ?? defaultTitlePage(script.title),
         updated_at: script.updatedAt,
       });
 
@@ -162,6 +189,7 @@ export const useScriptStore = create<ScriptState>((set, get) => ({
       await cacheScript({
         ...script,
         userId: activeUserId,
+        titlePage: script.titlePage ?? defaultTitlePage(script.title),
         unsynced: false,
       });
     }

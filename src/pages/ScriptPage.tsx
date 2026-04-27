@@ -5,13 +5,36 @@ import { useScriptStore } from "../store/useScriptStore";
 import ScriptEditor from "../components/ScriptEditor";
 import { cacheRemoteScript, getCachedScript } from "../lib/db";
 import AppLayout from "../components/AppLayout";
+import type { TitlePageData } from "../lib/screenplayFormat";
+
+function resolveTitlePage(
+  title: string,
+  input?: Partial<TitlePageData> | null
+): TitlePageData {
+  return {
+    title: (input?.title ?? title ?? "Untitled Script").toString(),
+    writtenBy: (input?.writtenBy ?? "").toString(),
+    basedOn: (input?.basedOn ?? "").toString(),
+    contact: (input?.contact ?? "").toString(),
+    draftDate: (
+      input?.draftDate ??
+      new Date().toLocaleDateString()
+    ).toString(),
+  };
+}
 
 export default function ScriptPage() {
   const params = useParams();
   const id = params.id ?? null;
   const [offlineUnavailable, setOfflineUnavailable] = useState(false);
 
-  const { setBlocks, setScriptId, setTitle, setSaveStatus } = useScriptStore();
+  const {
+    setBlocks,
+    setScriptId,
+    setTitle,
+    setTitlePage,
+    setSaveStatus,
+  } = useScriptStore();
 
   useEffect(() => {
     if (!id) return;
@@ -26,8 +49,10 @@ export default function ScriptPage() {
       if (cancelled) return;
 
       if (cached) {
+        const cachedTitle = cached.title || "Untitled Script";
         setBlocks(cached.blocks || []);
-        setTitle(cached.title || "Untitled Script");
+        setTitle(cachedTitle);
+        setTitlePage(resolveTitlePage(cachedTitle, cached.titlePage));
         setSaveStatus(
           !navigator.onLine ? "offline" : cached.unsynced ? "unsynced" : "saved"
         );
@@ -39,6 +64,7 @@ export default function ScriptPage() {
         if (!cached) {
           setBlocks([]);
           setTitle("Untitled Script");
+          setTitlePage(resolveTitlePage("Untitled Script"));
           setOfflineUnavailable(true);
         }
 
@@ -59,15 +85,22 @@ export default function ScriptPage() {
         }
 
         if (data) {
+          const remoteTitle = data.title || "Untitled Script";
+          const remoteTitlePage = resolveTitlePage(
+            remoteTitle,
+            (data.title_page ?? data.titlePage) as Partial<TitlePageData> | null
+          );
           setBlocks(data.blocks || []);
-          setTitle(data.title || "Untitled Script");
+          setTitle(remoteTitle);
+          setTitlePage(remoteTitlePage);
           setSaveStatus("saved");
 
           await cacheRemoteScript({
             id: data.id,
             userId: data.user_id || "",
-            title: data.title,
+            title: remoteTitle,
             blocks: data.blocks,
+            titlePage: remoteTitlePage,
             updatedAt: data.updated_at ?? Date.now(),
           });
         }
@@ -83,6 +116,7 @@ export default function ScriptPage() {
 
         setBlocks([]);
         setTitle("Untitled Script");
+        setTitlePage(resolveTitlePage("Untitled Script"));
         setSaveStatus(navigator.onLine ? "failed" : "offline");
       }
     }
@@ -92,7 +126,7 @@ export default function ScriptPage() {
     return () => {
       cancelled = true;
     };
-  }, [id, setBlocks, setScriptId, setSaveStatus, setTitle]);
+  }, [id, setBlocks, setSaveStatus, setScriptId, setTitle, setTitlePage]);
 
   if (offlineUnavailable) {
     return (

@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import {
@@ -20,7 +20,6 @@ import {
   getNextType,
   getPreviousType,
   revisionBackground,
-  revisionColors,
 } from "../lib/screenplayFormat";
 import type {
   ExportSettings,
@@ -35,14 +34,11 @@ import type { RevisionColor, ScriptBlock } from "../types/script";
 type MenuName =
   | "file"
   | "edit"
-  | "view"
   | "insert"
   | "tools"
   | "production"
   | "help"
   | null;
-
-type ViewMode = "normal" | "page";
 
 const VISUAL_PAGE_MAX_WIDTH_PX = 816;
 const VISUAL_PAGE_MIN_HEIGHT_PX = 1056;
@@ -50,6 +46,7 @@ const VISUAL_PAGE_PADDING_TOP_PX = 96;
 const VISUAL_PAGE_PADDING_BOTTOM_PX = 96;
 const VISUAL_PAGE_PADDING_LEFT_PX = 144;
 const VISUAL_PAGE_PADDING_RIGHT_PX = 96;
+const VISUAL_PAGE_BLOCKS = 22;
 const VISUAL_PAGE_CONTENT_WIDTH_PX =
   VISUAL_PAGE_MAX_WIDTH_PX -
   VISUAL_PAGE_PADDING_LEFT_PX -
@@ -103,6 +100,8 @@ export default function ScriptEditor() {
     saveScript,
     title,
     setTitle,
+    titlePage,
+    setTitlePage,
     setScriptId,
     userId,
     markUnsynced,
@@ -110,12 +109,6 @@ export default function ScriptEditor() {
 
   const [activeMenu, setActiveMenu] = useState<MenuName>(null);
   const [activeBlockId, setActiveBlockId] = useState<string | null>(null);
-
-  const [showNavigator, setShowNavigator] = useState(true);
-  const [showRightPanel, setShowRightPanel] = useState(true);
-  const [rightPanelMode, setRightPanelMode] = useState<
-    "stats" | "feedback" | "notes" | "suggestions"
-  >("stats");
 
   const [showTitlePage, setShowTitlePage] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -126,22 +119,8 @@ export default function ScriptEditor() {
   const [productionMode, setProductionMode] = useState(false);
   const [revisionMode, setRevisionMode] = useState(false);
   const [currentRevisionColor] = useState<RevisionColor>("blue");
-  const [focusMode] = useState(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("page");
-
-  const [feedback, setFeedback] = useState(
-    "Click Analyze Script to generate basic writing feedback."
-  );
 
   const [format, setFormat] = useState<FormatSettings>(defaultFormat);
-
-  const [titlePage, setTitlePage] = useState<TitlePageData>({
-    title: "",
-    writtenBy: "",
-    basedOn: "",
-    contact: "",
-    draftDate: new Date().toLocaleDateString(),
-  });
 
   const [exportSettings, setExportSettings] = useState<ExportSettings>({
     includeTitlePage: true,
@@ -169,114 +148,6 @@ export default function ScriptEditor() {
     [blocks]
   );
 
-  const notes = useMemo(
-    () => blocks.filter((block) => block.note && block.note.trim().length > 0),
-    [blocks]
-  );
-
-  const stats = useMemo(() => {
-    const words = blocks
-      .map((block) => block.text.trim())
-      .join(" ")
-      .split(/\s+/)
-      .filter(Boolean).length;
-
-    return {
-      scenes: scenes.length,
-      blocks: blocks.length,
-      words,
-      characters: blocks.filter((block) => block.type === "character").length,
-      dialogue: blocks.filter((block) => block.type === "dialogue").length,
-      notes: notes.length,
-      locked: blocks.filter((block) => block.locked).length,
-      revisions: blocks.filter(
-        (block) => block.revisionColor && block.revisionColor !== "none"
-      ).length,
-      estimatedPages: Math.max(1, Math.ceil(blocks.length / 45)),
-    };
-  }, [blocks, scenes.length, notes.length]);
-
-  const smartSuggestions = useMemo(() => {
-    const suggestions: {
-      label: string;
-      type: ScriptBlock["type"];
-      text?: string;
-      helper: string;
-    }[] = [];
-
-    if (!activeBlock) {
-      suggestions.push({
-        label: "Start with FADE IN:",
-        type: "action",
-        text: "FADE IN:",
-        helper: "Classic opening text",
-      });
-      suggestions.push({
-        label: "Add Scene Heading",
-        type: "scene",
-        text: "INT. LOCATION - DAY",
-        helper: "Create your first slugline",
-      });
-      return suggestions;
-    }
-
-    if (activeBlock.type === "scene") {
-      suggestions.push({
-        label: "Add Action",
-        type: "action",
-        helper: "Describe what we see after the scene heading",
-      });
-      suggestions.push({
-        label: "Add Shot",
-        type: "action",
-        text: "ANGLE ON:",
-        helper: "Direct attention visually",
-      });
-    }
-
-    if (activeBlock.type === "action") {
-      suggestions.push({
-        label: "Add Character",
-        type: "character",
-        helper: "Start dialogue with a speaker cue",
-      });
-      suggestions.push({
-        label: "Add New Scene",
-        type: "scene",
-        text: "INT. LOCATION - DAY",
-        helper: "Move the story to a new location/time",
-      });
-    }
-
-    if (activeBlock.type === "character") {
-      suggestions.push({
-        label: "Add Dialogue",
-        type: "dialogue",
-        helper: "Write what the character says",
-      });
-      suggestions.push({
-        label: "Add Parenthetical",
-        type: "dialogue",
-        text: "(quietly)",
-        helper: "Small performance direction",
-      });
-    }
-
-    if (activeBlock.type === "dialogue") {
-      suggestions.push({
-        label: "Add Action",
-        type: "action",
-        helper: "Break up dialogue with behavior",
-      });
-      suggestions.push({
-        label: "Add Character Reply",
-        type: "character",
-        helper: "Continue the conversation",
-      });
-    }
-
-    return suggestions;
-  }, [activeBlock]);
 
   const resolvedTitlePage = useMemo<TitlePageData>(
     () => ({
@@ -310,10 +181,22 @@ export default function ScriptEditor() {
     [blocks, title, resolvedTitlePage, resolvedExportSettings]
   );
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("pageone:view-mode", viewMode);
-  }, [viewMode]);
+  const visualPageBlockIndices = useMemo(() => {
+    const pages: number[][] = [[]];
+
+    blocks.forEach((_, index) => {
+      const currentPage = pages[pages.length - 1];
+
+      if (currentPage.length >= VISUAL_PAGE_BLOCKS) {
+        pages.push([index]);
+        return;
+      }
+
+      currentPage.push(index);
+    });
+
+    return pages;
+  }, [blocks]);
 
   useLayoutEffect(() => {
     const blockId = pendingFocusBlockId.current;
@@ -364,7 +247,7 @@ export default function ScriptEditor() {
     return () => {
       if (saveTimeout.current) clearTimeout(saveTimeout.current);
     };
-  }, [blocks, title, runSave]);
+  }, [blocks, title, titlePage, runSave]);
 
   function closeMenus() {
     setActiveMenu(null);
@@ -379,6 +262,14 @@ export default function ScriptEditor() {
   function updateTitle(value: string) {
     setTitle(value);
     setTitlePage((prev) => ({ ...prev, title: value }));
+    markUnsynced();
+  }
+
+  function updateTitlePageField(
+    field: keyof TitlePageData,
+    value: string
+  ) {
+    setTitlePage((prev) => ({ ...prev, [field]: value }));
     markUnsynced();
   }
 
@@ -416,13 +307,6 @@ export default function ScriptEditor() {
             }
           : block
       )
-    );
-    markUnsynced();
-  }
-
-  function updateBlockNote(id: string, note: string) {
-    setBlocks(
-      blocks.map((block) => (block.id === id ? { ...block, note } : block))
     );
     markUnsynced();
   }
@@ -561,11 +445,25 @@ export default function ScriptEditor() {
       user_id: userId,
       title: "Untitled Script",
       blocks: newBlocks,
+      title_page: {
+        title: "Untitled Script",
+        writtenBy: "",
+        basedOn: "",
+        contact: "",
+        draftDate: new Date().toLocaleDateString(),
+      },
       updated_at: Date.now(),
     });
 
     setScriptId(newId);
     setTitle("Untitled Script");
+    setTitlePage({
+      title: "Untitled Script",
+      writtenBy: "",
+      basedOn: "",
+      contact: "",
+      draftDate: new Date().toLocaleDateString(),
+    });
     setBlocks(newBlocks);
     navigate(`/script/${newId}`);
     closeMenus();
@@ -638,54 +536,6 @@ export default function ScriptEditor() {
     setFormat(defaultFormat);
   }
 
-  function showCollaborationPlaceholder() {
-    // Intentionally disabled in toolbar.
-  }
-
-  function showSplitPlaceholder() {
-    // Intentionally disabled in toolbar.
-  }
-
-  function showBeatBoardPlaceholder() {
-    // Intentionally disabled in toolbar.
-  }
-
-  function analyzeScript() {
-    const notesOut: string[] = [];
-
-    if (stats.scenes === 0) {
-      notesOut.push("Add scene headings so the navigator can structure your script.");
-    }
-
-    if (stats.dialogue > stats.blocks * 0.6) {
-      notesOut.push("Dialogue is heavy. Consider adding more action lines for pacing.");
-    }
-
-    if (stats.words < 100) {
-      notesOut.push("This is still very short. Keep building the scene before judging pacing.");
-    }
-
-    if (stats.characters === 0) {
-      notesOut.push("No character cues found yet. Add CHARACTER lines before dialogue.");
-    }
-
-    if (stats.locked > 0) {
-      notesOut.push(`${stats.locked} element(s) are locked. Good for protecting production text.`);
-    }
-
-    if (stats.revisions > 0) {
-      notesOut.push(`${stats.revisions} element(s) have revision colors applied.`);
-    }
-
-    if (notesOut.length === 0) {
-      notesOut.push("Nice balance so far. Scene structure, dialogue, and action are all present.");
-    }
-
-    setFeedback(notesOut.join("\n\n"));
-    setRightPanelMode("feedback");
-    closeMenus();
-  }
-
   function clearScript() {
     const confirmed = window.confirm(
       "Clear this script? This replaces the current script with FADE IN."
@@ -705,49 +555,6 @@ export default function ScriptEditor() {
 
     markUnsynced();
     closeMenus();
-  }
-
-  function toggleWritingStatsPanel() {
-    if (showRightPanel && rightPanelMode === "stats") {
-      setShowRightPanel(false);
-      return;
-    }
-
-    setShowRightPanel(true);
-    setRightPanelMode("stats");
-    closeMenus();
-  }
-
-  function toggleFeedbackPanel() {
-    if (showRightPanel && rightPanelMode === "feedback") {
-      setShowRightPanel(false);
-      return;
-    }
-
-    setShowRightPanel(true);
-    setRightPanelMode("feedback");
-    closeMenus();
-  }
-
-  function toggleViewsMenu() {
-    setActiveMenu((current) => (current === "view" ? null : "view"));
-  }
-
-  function toggleRightPanel() {
-    setShowRightPanel((value) => !value);
-    closeMenus();
-  }
-
-  function toggleNavigatorPanel() {
-    setShowNavigator((value) => !value);
-    closeMenus();
-  }
-
-  function scrollToBlock(id: string) {
-    document.getElementById(`block-${id}`)?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
   }
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>, index: number) {
@@ -808,12 +615,6 @@ export default function ScriptEditor() {
       markUnsynced();
     }
   }
-
-  const gridColumns = `${showNavigator && !focusMode ? "260px" : "0px"} 1fr ${
-    showRightPanel && !focusMode ? "300px" : "0px"
-  }`;
-
-  const contentWidth = format.pageWidth - format.leftMargin - format.rightMargin;
 
   function renderBlock(block: ScriptBlock, index: number) {
     const sceneIndex = scenes.findIndex((scene) => scene.id === block.id);
@@ -927,21 +728,20 @@ export default function ScriptEditor() {
   }
 
   return (
-    <AppLayout showSaveStatus contentClassName="px-0 py-0 sm:px-0 sm:py-0">
+    <AppLayout contentClassName="px-0 py-0 sm:px-0 sm:py-0">
       <div
         className="min-h-[calc(100vh-56px)] bg-zinc-200 text-zinc-950 font-sans"
         onClick={() => setActiveMenu(null)}
       >
       <header className="sticky top-14 z-30 border-b border-zinc-300 bg-zinc-50 font-sans shadow-sm">
         <div
-          className="flex min-h-10 items-center gap-4 overflow-x-auto border-b border-zinc-200 px-3 text-xs font-sans sm:px-4"
+          className="hidden min-h-10 items-center gap-4 overflow-x-auto border-b border-zinc-200 px-3 text-xs font-sans sm:px-4"
           onClick={(e) => e.stopPropagation()}
         >
           <span className="shrink-0 font-bold tracking-wide">Script Studio</span>
 
           <MenuButton label="File" menu="file" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
           <MenuButton label="Edit" menu="edit" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
-          <MenuButton label="View" menu="view" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
           <MenuButton label="Insert" menu="insert" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
           <MenuButton label="Tools" menu="tools" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
           <MenuButton label="Production" menu="production" activeMenu={activeMenu} setActiveMenu={setActiveMenu} />
@@ -977,29 +777,6 @@ export default function ScriptEditor() {
             </Dropdown>
           )}
 
-          {activeMenu === "view" && (
-            <Dropdown left={160}>
-              <DropdownItem
-                label={viewMode === "normal" ? "Normal View (Active)" : "Normal View"}
-                helper="Continuous writing canvas"
-                active={viewMode === "normal"}
-                onClick={() => {
-                  setViewMode("normal");
-                  closeMenus();
-                }}
-              />
-              <DropdownItem
-                label={viewMode === "page" ? "Page View (Active)" : "Page View"}
-                helper="Paper-style pages with visible boundaries"
-                active={viewMode === "page"}
-                onClick={() => {
-                  setViewMode("page");
-                  closeMenus();
-                }}
-              />
-            </Dropdown>
-          )}
-
           {activeMenu === "insert" && (
             <Dropdown left={212}>
               <DropdownItem label="Scene Heading" helper="INT./EXT. slugline" onClick={() => insertBlock("scene")} />
@@ -1020,11 +797,23 @@ export default function ScriptEditor() {
                 helper="Feedback tools are coming soon"
                 disabled
                 titleOverride="Analyze Script (Coming soon)"
-                onClick={analyzeScript}
+                onClick={() => undefined}
               />
               <DropdownItem label="Format Cleanup" helper="Fix common casing" onClick={formatCleanup} />
-              <DropdownItem label="Smart Suggestions" helper="Open suggested next elements" onClick={() => setRightPanelMode("suggestions")} />
-              <DropdownItem label="Show Writing Stats" helper="Open stats panel" onClick={() => setRightPanelMode("stats")} />
+              <DropdownItem
+                label="Smart Suggestions"
+                helper="Suggestion tools are coming soon"
+                disabled
+                titleOverride="Smart Suggestions (Coming soon)"
+                onClick={() => undefined}
+              />
+              <DropdownItem
+                label="Show Writing Stats"
+                helper="Stats panel is coming soon"
+                disabled
+                titleOverride="Writing Stats (Coming soon)"
+                onClick={() => undefined}
+              />
               <DropdownItem label="Reset Format Defaults" helper="Industry baseline" onClick={resetFormatDefaults} />
             </Dropdown>
           )}
@@ -1051,290 +840,157 @@ export default function ScriptEditor() {
         </div>
 
         <ScriptToolbar
-          title={title || "Untitled Script"}
           activeElementType={activeBlock?.type || "action"}
           onChangeElementType={(type) => {
             if (effectiveActiveBlockId) {
               updateBlockType(effectiveActiveBlockId, type);
             }
           }}
-          onCollaboration={showCollaborationPlaceholder}
-          onSplit={showSplitPlaceholder}
-          onViews={toggleViewsMenu}
-          onBeatBoard={showBeatBoardPlaceholder}
-          onTitlePage={() => setShowTitlePage(true)}
-          onWritingStats={toggleWritingStatsPanel}
-          onShowHide={toggleRightPanel}
-          onNavigator={toggleNavigatorPanel}
-          onFeedback={toggleFeedbackPanel}
-          isStatsActive={showRightPanel && rightPanelMode === "stats"}
-          isShowHideActive={showRightPanel}
-          isNavigatorActive={showNavigator}
-          isFeedbackActive={showRightPanel && rightPanelMode === "feedback"}
-          isPageViewActive={viewMode === "page"}
-          collaborationDisabled
-          splitDisabled
-          beatBoardDisabled
-          feedbackDisabled
+          onBackToDashboard={() => navigate("/dashboard")}
+          onNewScript={createNewScript}
+          onSaveNow={saveNow}
+          onToggleTitlePage={() => setShowTitlePage((value) => !value)}
+          isTitlePageVisible={showTitlePage}
+          onOpenExportSettings={() => setShowExportSettings(true)}
+          onPrint={printScript}
+          onOpenFormatSettings={() => setShowFormatSettings(true)}
         />
       </header>
 
-      <div
-        className="grid grid-cols-1 font-sans lg:[grid-template-columns:var(--editor-grid-cols)]"
-        style={{ "--editor-grid-cols": gridColumns } as CSSProperties}
-      >
-        {showNavigator && !focusMode && (
-          <aside
-            className="hidden overflow-y-auto border-r border-zinc-200 bg-zinc-50 p-4 font-sans shadow-inner lg:sticky lg:top-[148px] lg:block lg:h-[calc(100vh-148px)]"
-          >
-            <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Navigator</h2>
-            <p className="mt-1 text-xs text-zinc-500">Scenes, notes & locks</p>
+      <section className="border-b border-zinc-300 bg-zinc-100/80 px-4 py-5 text-center">
+        <p className="mx-auto max-w-[900px] truncate text-base font-semibold tracking-wide text-zinc-900">
+          {(title || "Untitled Script").toUpperCase()}
+        </p>
+        <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-zinc-500">
+          PageOne Script
+        </p>
+      </section>
 
-            <div className="mt-4 space-y-2">
-              {scenes.length === 0 && <p className="text-xs text-zinc-400">No scene headings yet.</p>}
-
-              {scenes.map((scene, index) => (
-                <button
-                  key={scene.id}
-                  onClick={() => scrollToBlock(scene.id)}
-                  className="w-full rounded border border-zinc-200 bg-white p-2 text-left text-xs shadow-sm transition hover:border-zinc-300 hover:shadow"
-                >
-                  <span className="block font-bold text-zinc-700">
-                    Scene {index + 1} {scene.locked ? "🔒" : ""}
-                  </span>
-                  <span className="block text-zinc-500">{scene.text || "Untitled Scene"}</span>
-                  {scene.note && <span className="mt-1 block text-[10px] text-blue-500">Has note</span>}
-                </button>
-              ))}
-            </div>
-          </aside>
-        )}
-
-        <main className="min-h-[calc(100vh-148px)] overflow-x-auto overflow-y-auto px-3 py-4 font-sans sm:px-6 sm:py-6 lg:px-8 lg:py-8">
-          {viewMode === "page" ? (
-            <div className="mx-auto w-full max-w-[960px]">
+      <div className="font-sans">
+        <main className="min-h-[calc(100vh-206px)] overflow-x-auto overflow-y-auto px-3 py-4 font-sans sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+          <div className="mx-auto flex w-full max-w-[980px] flex-col items-center gap-8">
+            {showTitlePage && (
               <section
-                className="mx-auto w-full border border-zinc-300 bg-white text-black shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
+                className="w-full border border-zinc-300 bg-white text-black shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
                 style={{
-                  width: `${VISUAL_PAGE_MAX_WIDTH_PX}px`,
+                  width: `min(${VISUAL_PAGE_MAX_WIDTH_PX}px, calc(100vw - 2.5rem))`,
                   minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
                   paddingTop: `${VISUAL_PAGE_PADDING_TOP_PX}px`,
                   paddingBottom: `${VISUAL_PAGE_PADDING_BOTTOM_PX}px`,
                   paddingLeft: `${VISUAL_PAGE_PADDING_LEFT_PX}px`,
                   paddingRight: `${VISUAL_PAGE_PADDING_RIGHT_PX}px`,
+                  boxSizing: "border-box",
                   fontFamily: '"Courier Prime", Courier, monospace',
-                  fontSize: `${format.fontSize}pt`,
-                  lineHeight: format.lineHeight,
                 }}
               >
-                <div className="mb-7 border-b border-zinc-200 pb-4 text-center">
-                  <input
-                    value={title}
-                    onChange={(e) => updateTitle(e.target.value)}
-                    className="mx-auto block w-full max-w-[500px] bg-transparent text-center font-medium text-[11px] uppercase tracking-[0.18em] text-zinc-500 outline-none"
-                    placeholder="UNTITLED SCRIPT"
-                  />
-                </div>
-
-                <div className="mx-auto" style={{ width: `${VISUAL_PAGE_CONTENT_WIDTH_PX}px` }}>
-                  {blocks.map((block, index) => renderBlock(block, index))}
-                </div>
-              </section>
-            </div>
-          ) : (
-            <>
-              <div
-                className="mx-auto mb-4 flex min-w-max items-center justify-between gap-3"
-                style={{
-                  width: `${format.pageWidth}in`,
-                  maxWidth: `${VISUAL_PAGE_MAX_WIDTH_PX}px`,
-                }}
-              >
-                <input
-                  value={title}
-                  onChange={(e) => updateTitle(e.target.value)}
-                  className="min-w-0 w-full bg-transparent text-lg font-bold outline-none"
-                  placeholder="Untitled Script"
-                />
-
-                <span className="shrink-0 text-xs text-zinc-500">
-                  {format.pageWidth}" × {format.pageHeight}"
-                </span>
-              </div>
-
-              <section
-                style={{
-                  width: `${format.pageWidth}in`,
-                  maxWidth: `${VISUAL_PAGE_MAX_WIDTH_PX}px`,
-                }}
-                className="mx-auto w-full text-black"
-              >
-              <div
-                className="text-black"
-                style={{
-                  paddingTop: `${format.topMargin}in`,
-                  paddingBottom: `${format.bottomMargin}in`,
-                  paddingLeft: `${format.leftMargin}in`,
-                  paddingRight: `${format.rightMargin}in`,
-                  fontFamily: '"Courier Prime", Courier, monospace',
-                  fontSize: `${format.fontSize}pt`,
-                  lineHeight: format.lineHeight,
-                }}
-              >
-                <div style={{ width: `${contentWidth}in` }}>
-                  {blocks.map((block, index) => renderBlock(block, index))}
-                </div>
-              </div>
-              </section>
-            </>
-          )}
-        </main>
-
-        {showRightPanel && !focusMode && (
-          <aside
-            className="hidden overflow-y-auto border-l border-zinc-200 bg-zinc-50 p-4 font-sans shadow-inner lg:sticky lg:top-[148px] lg:block lg:h-[calc(100vh-148px)]"
-          >
-            <div className="mb-4 grid grid-cols-2 gap-2 rounded border border-zinc-200 bg-white p-1 shadow-sm">
-              <PanelButton label="Stats" active={rightPanelMode === "stats"} onClick={() => setRightPanelMode("stats")} />
-              <PanelButton
-                label="Feedback"
-                active={rightPanelMode === "feedback"}
-                onClick={() => setRightPanelMode("feedback")}
-                disabled
-                title="Feedback (Coming soon)"
-              />
-              <PanelButton label="Notes" active={rightPanelMode === "notes"} onClick={() => setRightPanelMode("notes")} />
-              <PanelButton label="Suggest" active={rightPanelMode === "suggestions"} onClick={() => setRightPanelMode("suggestions")} />
-            </div>
-
-            {rightPanelMode === "stats" && (
-              <div className="space-y-3">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Writing Stats</h2>
-                <Stat label="Scenes" value={stats.scenes} />
-                <Stat label="Elements" value={stats.blocks} />
-                <Stat label="Words" value={stats.words} />
-                <Stat label="Estimated Pages" value={stats.estimatedPages} />
-                <Stat label="Notes" value={stats.notes} />
-                <Stat label="Locked" value={stats.locked} />
-                <Stat label="Revisions" value={stats.revisions} />
-              </div>
-            )}
-
-            {rightPanelMode === "feedback" && (
-              <div className="space-y-3">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Feedback</h2>
-
-                <div className="whitespace-pre-wrap rounded border border-zinc-200 bg-white p-3 text-xs text-zinc-600 shadow-sm">
-                  {feedback}
-                </div>
-
-                <button onClick={analyzeScript} className="w-full rounded bg-blue-600 px-3 py-2 text-xs font-bold text-white hover:bg-blue-500">
-                  Analyze Script
-                </button>
-              </div>
-            )}
-
-            {rightPanelMode === "notes" && (
-              <div className="space-y-3">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Element Notes</h2>
-
-                {activeBlock ? (
-                  <>
-                    <p className="text-xs text-zinc-500">Current: {activeBlock.type}</p>
-
-                    <textarea
-                      value={activeBlock.note || ""}
-                      onChange={(e) => updateBlockNote(activeBlock.id, e.target.value)}
-                      placeholder="Add a note for this element..."
-                      className="h-32 w-full resize-none rounded border border-zinc-200 bg-white p-3 text-sm shadow-sm outline-none focus:border-blue-400"
+                <div
+                  className="mx-auto flex w-full flex-col"
+                  style={{
+                    minHeight: `${
+                      VISUAL_PAGE_MIN_HEIGHT_PX -
+                      VISUAL_PAGE_PADDING_TOP_PX -
+                      VISUAL_PAGE_PADDING_BOTTOM_PX
+                    }px`,
+                  }}
+                >
+                  <div className="mx-auto mt-20 w-full max-w-[540px] text-center">
+                    <input
+                      value={resolvedTitlePage.title}
+                      onChange={(e) => updateTitle(e.target.value)}
+                      className="w-full bg-transparent text-center text-[22px] font-semibold uppercase tracking-[0.08em] outline-none placeholder:text-zinc-300"
+                      placeholder="UNTITLED SCRIPT"
                     />
 
-                    <button onClick={() => toggleBlockLock(activeBlock.id)} className="w-full rounded border border-zinc-200 bg-white px-3 py-2 text-xs font-bold shadow-sm hover:bg-zinc-50">
-                      {activeBlock.locked ? "Unlock Element" : "Lock Element"}
-                    </button>
+                    <p className="mt-16 text-[13px] uppercase tracking-[0.18em] text-zinc-500">
+                      Written by
+                    </p>
 
-                    <select
-                      value={activeBlock.revisionColor || "none"}
-                      onChange={(e) => updateBlockRevision(activeBlock.id, e.target.value as RevisionColor)}
-                      className="w-full rounded border border-zinc-200 bg-white px-3 py-2 text-xs shadow-sm"
-                    >
-                      {revisionColors.map((color) => (
-                        <option key={color} value={color}>
-                          {color === "none" ? "No Revision Color" : `${color} revision`}
-                        </option>
-                      ))}
-                    </select>
-                  </>
-                ) : (
-                  <p className="text-xs text-zinc-500">Click an element to add notes.</p>
+                    <input
+                      value={titlePage.writtenBy}
+                      onChange={(e) =>
+                        updateTitlePageField("writtenBy", e.target.value)
+                      }
+                      className="mx-auto mt-3 w-full max-w-[380px] bg-transparent text-center text-[17px] outline-none placeholder:text-zinc-300"
+                      placeholder="Author Name"
+                    />
+
+                    <input
+                      value={titlePage.basedOn}
+                      onChange={(e) =>
+                        updateTitlePageField("basedOn", e.target.value)
+                      }
+                      className="mx-auto mt-7 w-full max-w-[420px] bg-transparent text-center text-[12px] italic text-zinc-700 outline-none placeholder:text-zinc-300"
+                      placeholder="Based on..."
+                    />
+                  </div>
+
+                  <div className="mt-auto grid grid-cols-1 gap-6 pt-16 text-[12px] sm:grid-cols-2">
+                    <div className="text-left">
+                      <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+                        Contact
+                      </p>
+                      <textarea
+                        value={titlePage.contact}
+                        onChange={(e) =>
+                          updateTitlePageField("contact", e.target.value)
+                        }
+                        className="h-28 w-full resize-none bg-transparent leading-relaxed outline-none placeholder:text-zinc-300"
+                        placeholder="contact@email.com&#10;+1 (555) 555-5555"
+                      />
+                    </div>
+
+                    <div className="text-left sm:text-right">
+                      <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-zinc-400">
+                        Draft Date
+                      </p>
+                      <input
+                        value={titlePage.draftDate}
+                        onChange={(e) =>
+                          updateTitlePageField("draftDate", e.target.value)
+                        }
+                        className="w-full bg-transparent text-left outline-none placeholder:text-zinc-300 sm:text-right"
+                        placeholder="Draft date"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {visualPageBlockIndices.map((pageIndices, pageIndex) => (
+              <section
+                key={`visual-page-${pageIndex}`}
+                className="w-full border border-zinc-300 bg-white text-black shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
+                style={{
+                  width: `min(${VISUAL_PAGE_MAX_WIDTH_PX}px, calc(100vw - 2.5rem))`,
+                  minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
+                  paddingTop: `${VISUAL_PAGE_PADDING_TOP_PX}px`,
+                  paddingBottom: `${VISUAL_PAGE_PADDING_BOTTOM_PX}px`,
+                  paddingLeft: `${VISUAL_PAGE_PADDING_LEFT_PX}px`,
+                  paddingRight: `${VISUAL_PAGE_PADDING_RIGHT_PX}px`,
+                  boxSizing: "border-box",
+                  fontFamily: '"Courier Prime", Courier, monospace',
+                  fontSize: `${format.fontSize}pt`,
+                  lineHeight: format.lineHeight,
+                }}
+              >
+                {pageIndex > 0 && (
+                  <div className="mb-6 border-b border-zinc-200 pb-3 text-right text-[10px] uppercase tracking-[0.14em] text-zinc-400">
+                    Page {pageIndex + 1}
+                  </div>
                 )}
 
-                <div className="space-y-2 pt-3">
-                  {notes.map((noteBlock) => (
-                    <button
-                      key={noteBlock.id}
-                      onClick={() => scrollToBlock(noteBlock.id)}
-                      className="w-full rounded border border-zinc-200 bg-white p-2 text-left text-xs shadow-sm hover:bg-zinc-50"
-                    >
-                      <span className="block font-bold uppercase">{noteBlock.type}</span>
-                      <span className="line-clamp-2 text-zinc-500">{noteBlock.note}</span>
-                    </button>
-                  ))}
+                <div className="mx-auto" style={{ width: `${VISUAL_PAGE_CONTENT_WIDTH_PX}px` }}>
+                  {pageIndices.map((blockIndex) => {
+                    const block = blocks[blockIndex];
+                    return block ? renderBlock(block, blockIndex) : null;
+                  })}
                 </div>
-              </div>
-            )}
-
-            {rightPanelMode === "suggestions" && (
-              <div className="space-y-3">
-                <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-500">Smart Suggestions</h2>
-                <p className="text-xs text-zinc-500">
-                  Based on your current element, here are useful next moves.
-                </p>
-
-                {smartSuggestions.map((suggestion) => (
-                  <button
-                    key={`${suggestion.label}-${suggestion.type}`}
-                    onClick={() => insertBlock(suggestion.type, suggestion.text || "")}
-                    className="w-full rounded border border-zinc-200 bg-white p-3 text-left text-xs shadow-sm transition hover:border-zinc-300 hover:bg-zinc-50"
-                  >
-                    <span className="block font-bold">{suggestion.label}</span>
-                    <span className="block text-zinc-500">{suggestion.helper}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </aside>
-        )}
-      </div>
-
-      {showTitlePage && (
-        <LargeModal title="Title Page" onClose={() => setShowTitlePage(false)}>
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_330px]">
-            <div>
-              <TextField label="Title" value={resolvedTitlePage.title} onChange={updateTitle} />
-              <TextField label="Written By" value={titlePage.writtenBy} onChange={(value) => setTitlePage({ ...titlePage, writtenBy: value })} />
-              <TextField label="Based On" value={titlePage.basedOn} onChange={(value) => setTitlePage({ ...titlePage, basedOn: value })} />
-              <TextAreaField label="Contact Info" value={titlePage.contact} onChange={(value) => setTitlePage({ ...titlePage, contact: value })} />
-              <TextField label="Draft Date" value={titlePage.draftDate} onChange={(value) => setTitlePage({ ...titlePage, draftDate: value })} />
-
-              <button onClick={() => setShowTitlePage(false)} className="mt-4 rounded bg-zinc-900 px-4 py-2 text-sm font-bold text-white">
-                Save Title Page
-              </button>
-            </div>
-
-            <div className="h-[340px] rounded border border-zinc-300 bg-white p-6 text-center shadow-inner sm:h-[430px] sm:p-8" style={{ fontFamily: '"Courier Prime", Courier, monospace' }}>
-              <div className="mt-20 text-lg font-bold uppercase">
-                {resolvedTitlePage.title}
-              </div>
-              <div className="mt-10 text-sm">Written by</div>
-              <div className="mt-2 text-sm">{titlePage.writtenBy || "Your Name"}</div>
-              {titlePage.basedOn && <div className="mt-10 text-xs">Based on {titlePage.basedOn}</div>}
-              <div className="mt-24 whitespace-pre-wrap text-left text-xs">{titlePage.contact || "Contact information"}</div>
-              <div className="mt-6 text-left text-xs">{titlePage.draftDate}</div>
-            </div>
+              </section>
+            ))}
           </div>
-        </LargeModal>
-      )}
+        </main>
+      </div>
 
       {showFormatSettings && (
         <Modal title="Format Settings" onClose={() => setShowFormatSettings(false)}>
@@ -1491,43 +1147,6 @@ function Divider() {
   return <div className="my-1 border-t border-zinc-200" />;
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded border border-zinc-200 bg-white p-3 font-sans shadow-sm">
-      <p className="text-[10px] uppercase tracking-wider text-zinc-500">{label}</p>
-      <p className="mt-1 text-xl font-bold">{value}</p>
-    </div>
-  );
-}
-
-function PanelButton({
-  label,
-  active,
-  onClick,
-  disabled = false,
-  title,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  disabled?: boolean;
-  title?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={title ?? label}
-      className={`rounded px-3 py-1.5 text-xs font-bold transition ${
-        active ? "bg-zinc-900 text-white shadow-sm" : "text-zinc-600 hover:bg-zinc-50"
-      } ${disabled ? "cursor-not-allowed opacity-50 hover:bg-transparent" : ""}`}
-    >
-      {label}
-    </button>
-  );
-}
-
 function NumberField({
   label,
   value,
@@ -1562,23 +1181,6 @@ function TextField({
   );
 }
 
-function TextAreaField({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="mb-3 block text-xs font-bold text-zinc-600">
-      {label}
-      <textarea value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 h-24 w-full resize-none rounded border border-zinc-300 px-3 py-2 text-sm font-normal" />
-    </label>
-  );
-}
-
 function CheckField({
   label,
   checked,
@@ -1608,31 +1210,6 @@ function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3 py-4 font-sans sm:px-4">
       <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded bg-white p-4 text-zinc-900 shadow-2xl sm:p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-lg font-bold">{title}</h2>
-          <button onClick={onClose} className="text-sm text-zinc-500 hover:text-zinc-900">
-            Close
-          </button>
-        </div>
-
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function LargeModal({
-  title,
-  children,
-  onClose,
-}: {
-  title: string;
-  children: ReactNode;
-  onClose: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-3 py-4 font-sans sm:px-4">
-      <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded bg-white p-4 text-zinc-900 shadow-2xl sm:p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-bold">{title}</h2>
           <button onClick={onClose} className="text-sm text-zinc-500 hover:text-zinc-900">

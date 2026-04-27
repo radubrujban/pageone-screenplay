@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import AppLayout from "../components/AppLayout";
 import type { ScriptBlock } from "../types/script";
 import type { CachedScript } from "../lib/db";
+import type { TitlePageData } from "../lib/screenplayFormat";
 import { cacheRemoteScripts, cacheScript, getCachedScriptsByUser } from "../lib/db";
 import { useScriptStore } from "../store/useScriptStore";
 
@@ -12,6 +13,7 @@ type Script = {
   title: string;
   updated_at: number;
   blocks?: ScriptBlock[];
+  title_page?: TitlePageData;
 };
 
 function mapCachedScripts(cached: CachedScript[]): Script[] {
@@ -188,12 +190,20 @@ export default function DashboardPage() {
         text: "FADE IN:",
       },
     ] as ScriptBlock[];
+    const titlePage: TitlePageData = {
+      title: "Untitled Script",
+      writtenBy: "",
+      basedOn: "",
+      contact: "",
+      draftDate: new Date().toLocaleDateString(),
+    };
 
     await cacheScript({
       id: newId,
       userId: currentUserId,
       title: "Untitled Script",
       blocks,
+      titlePage,
       updatedAt,
       unsynced: !navigator.onLine,
     });
@@ -204,6 +214,7 @@ export default function DashboardPage() {
         user_id: currentUserId,
         title: "Untitled Script",
         blocks,
+        title_page: titlePage,
         updated_at: updatedAt,
       });
       setSaveStatus("saved");

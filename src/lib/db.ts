@@ -1,11 +1,13 @@
 import Dexie from "dexie";
 import type { ScriptBlock } from "../types/script";
+import type { TitlePageData } from "./screenplayFormat";
 
 export interface CachedScript {
   id: string;
   userId: string;
   title: string;
   blocks: ScriptBlock[];
+  titlePage?: TitlePageData;
   updatedAt: number;
   unsynced: boolean;
 }
@@ -33,6 +35,27 @@ class ScriptDatabase extends Dexie {
             script.unsynced = false;
           })
       );
+
+    this.version(3)
+      .stores({
+        scripts: "id, userId, updatedAt, unsynced",
+      })
+      .upgrade((tx) =>
+        tx
+          .table("scripts")
+          .toCollection()
+          .modify((script: Record<string, unknown>) => {
+            if (typeof script.titlePage !== "object" || script.titlePage === null) {
+              script.titlePage = {
+                title: typeof script.title === "string" ? script.title : "",
+                writtenBy: "",
+                basedOn: "",
+                contact: "",
+                draftDate: new Date().toLocaleDateString(),
+              };
+            }
+          })
+      );
   }
 }
 
@@ -47,6 +70,7 @@ export async function cacheRemoteScript(input: {
   userId: string;
   title?: string | null;
   blocks?: ScriptBlock[] | null;
+  titlePage?: TitlePageData | null;
   updatedAt?: number;
 }) {
   await cacheScript({
@@ -54,6 +78,13 @@ export async function cacheRemoteScript(input: {
     userId: input.userId,
     title: input.title || "Untitled Script",
     blocks: input.blocks || [],
+    titlePage: input.titlePage ?? {
+      title: input.title || "Untitled Script",
+      writtenBy: "",
+      basedOn: "",
+      contact: "",
+      draftDate: new Date().toLocaleDateString(),
+    },
     updatedAt: input.updatedAt ?? Date.now(),
     unsynced: false,
   });
@@ -66,6 +97,7 @@ export async function cacheRemoteScripts(
     title?: string | null;
     blocks?: ScriptBlock[] | null;
     updated_at?: number;
+    title_page?: TitlePageData | null;
   }[]
 ) {
   if (scripts.length === 0) return;
@@ -76,6 +108,13 @@ export async function cacheRemoteScripts(
       userId,
       title: script.title || "Untitled Script",
       blocks: script.blocks || [],
+      titlePage: script.title_page ?? {
+        title: script.title || "Untitled Script",
+        writtenBy: "",
+        basedOn: "",
+        contact: "",
+        draftDate: new Date().toLocaleDateString(),
+      },
       updatedAt: script.updated_at ?? Date.now(),
       unsynced: false,
     }))
