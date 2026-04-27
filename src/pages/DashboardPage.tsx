@@ -30,6 +30,8 @@ export default function DashboardPage() {
   const [userId, setUserId] = useState<string | null>(null);
   const [renamingScript, setRenamingScript] = useState<Script | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
+  const [aboutOpen, setAboutOpen] = useState(false);
+  const [isEasterEggActive, setIsEasterEggActive] = useState(false);
   const authReady = useScriptStore((state) => state.authReady);
   const authUserId = useScriptStore((state) => state.userId);
   const authSession = useScriptStore((state) => state.session);
@@ -50,33 +52,6 @@ export default function DashboardPage() {
   );
 
   const newestScript = recentScripts[0] ?? null;
-
-  const writingSnapshot = useMemo(() => {
-    let pages = 0;
-    let scenes = 0;
-    let words = 0;
-
-    for (const script of sortedScripts) {
-      const blocks = script.blocks || [];
-      scenes += blocks.filter(
-        (block: ScriptBlock) =>
-          block.type === "scene_heading" || block.type === "scene"
-      ).length;
-      words += blocks
-        .map((block: ScriptBlock) => block.text.trim())
-        .join(" ")
-        .split(/\s+/)
-        .filter(Boolean).length;
-      pages += Math.max(1, Math.ceil(blocks.length / 45));
-    }
-
-    return {
-      scripts: sortedScripts.length,
-      pages,
-      scenes,
-      words,
-    };
-  }, [sortedScripts]);
 
   async function fetchScripts() {
     const id = authUserId ?? authSession?.user?.id ?? null;
@@ -283,128 +258,144 @@ export default function DashboardPage() {
 
   return (
     <AppLayout>
-      <div className="mx-auto w-full max-w-5xl space-y-8 sm:space-y-10">
-        <section className="rounded-[2rem] border border-orange-100 bg-[#fff7ef] px-5 py-10 shadow-[0_10px_30px_rgba(194,99,46,0.08)] sm:px-8 sm:py-14">
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-zinc-500">
-              PageOne
-            </p>
-
-            <h1 className="mt-8 text-4xl font-semibold tracking-tight text-zinc-900 sm:text-5xl">
-              Write something real.
-            </h1>
-            <p className="mx-auto mt-4 max-w-xl text-sm leading-7 text-zinc-600 sm:text-base">
-              No AI. No noise. Just you and the page.
-            </p>
-
-            <div className="mt-9">
-              <button
-                onClick={createNewScript}
-                className="rounded-xl border border-[#f2a56f] bg-[#ee9b63] px-7 py-3 text-sm font-semibold text-white shadow-[0_10px_20px_rgba(238,155,99,0.25)] transition hover:bg-[#e78f56]"
-              >
-                Start Writing
-              </button>
-            </div>
-
-            <div className="mt-5 flex flex-col items-center justify-center gap-2.5 sm:flex-row">
-              <button
-                onClick={openNewestScript}
-                disabled={!newestScript}
-                className="rounded-lg border border-orange-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Open Recent
-              </button>
-              <button
-                onClick={() => alert("Templates are coming soon.")}
-                className="rounded-lg border border-orange-200 bg-white px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-orange-50"
-              >
-                Templates
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="mx-auto w-full max-w-3xl rounded-2xl border border-zinc-200 bg-white/95 p-4 shadow-sm sm:p-6">
-          <div className="flex items-center justify-between gap-3 border-b border-zinc-200 pb-3">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-zinc-600">
-              Recent Scripts
-            </h2>
-            <button
-              onClick={createNewScript}
-              className="rounded-md border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-[#a44f20] transition hover:bg-orange-100"
-            >
-              New Script
-            </button>
-          </div>
-
-          {recentScripts.length === 0 ? (
-            <div className="py-10 text-center">
-              <p className="text-sm text-zinc-600">
-                No drafts yet. Start writing and your scripts will appear here.
+      <div className="relative min-h-[calc(100vh-56px)] overflow-x-hidden bg-[#fbf8f2] text-zinc-950">
+        <div className="relative z-10 mx-auto w-full max-w-7xl px-4 pb-16 pt-8 sm:px-6 sm:pt-10">
+          <section className="border-b border-zinc-300 pb-12">
+            <div className="flex items-center justify-between">
+              <p className="text-[9px] font-medium uppercase tracking-[0.28em] text-zinc-500">
+                PageOne
               </p>
+              <button
+                onClick={() => setAboutOpen(true)}
+                className="text-[9px] font-medium uppercase tracking-[0.28em] text-zinc-500 transition hover:text-zinc-700"
+              >
+                about
+              </button>
             </div>
-          ) : (
-            <ul className="mt-2 divide-y divide-zinc-100">
-              {recentScripts.map((script: Script) => (
-                <li key={script.id} className="py-3.5">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <button
-                      onClick={() => navigate(`/script/${script.id}`)}
-                      className="text-left"
-                    >
-                      <p className="line-clamp-1 text-sm font-semibold text-zinc-900">
-                        {script.title || "Untitled Script"}
-                      </p>
-                      <p className="mt-1 text-xs text-zinc-500">
-                        Updated {formatUpdatedAt(script.updated_at)}
-                      </p>
-                    </button>
 
-                    <div className="flex items-center gap-3">
-                      <button
-                        onClick={() => startRename(script)}
-                        className="text-xs font-semibold text-zinc-500 transition hover:text-zinc-900"
-                      >
-                        Rename
-                      </button>
-                      <button
-                        onClick={() => deleteScript(script.id)}
-                        className="text-xs font-semibold text-red-500 transition hover:text-red-600"
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            <div className="relative mt-8">
+              <h1 className="max-w-5xl text-[3.9rem] font-medium lowercase leading-[0.86] text-zinc-950 sm:text-[6.8rem] lg:max-w-4xl">
+                write something.
+              </h1>
 
-        <section className="mx-auto w-full max-w-3xl rounded-xl border border-orange-100 bg-[#fffaf5] p-4 sm:p-5">
-          <h3 className="text-sm font-semibold uppercase tracking-[0.14em] text-zinc-600">
-            Writing Snapshot
-          </h3>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-lg border border-orange-100 bg-white px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">Scripts</p>
-              <p className="mt-1 text-sm font-semibold text-zinc-900">{writingSnapshot.scripts}</p>
+              <div className="mt-8 flex flex-wrap items-center gap-3 lg:mt-10">
+                <button
+                  onClick={createNewScript}
+                  className="inline-flex items-center border border-zinc-900/75 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-900 transition hover:bg-zinc-900 hover:text-[#fbf8f2]"
+                >
+                  Start Writing
+                </button>
+                <button
+                  onClick={openNewestScript}
+                  disabled={!newestScript}
+                  className="inline-flex items-center border border-zinc-300 px-4 py-2 text-[11px] font-medium uppercase tracking-[0.18em] text-zinc-700 transition hover:border-zinc-900 hover:text-zinc-950 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Open Recent
+                </button>
+              </div>
             </div>
-            <div className="rounded-lg border border-orange-100 bg-white px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">Pages</p>
-              <p className="mt-1 text-sm font-semibold text-zinc-900">~{writingSnapshot.pages}</p>
+          </section>
+
+          <section className="mt-10">
+            <div>
+              <div className="flex items-end justify-between gap-4">
+                <h2 className="text-[10px] font-medium uppercase tracking-[0.3em] text-zinc-600">
+                  Recent Scripts
+                </h2>
+              </div>
+
+              {recentScripts.length === 0 ? (
+                <div className="mt-5 border-t border-zinc-300 pt-8">
+                  <p className="text-[13px] leading-6 text-zinc-600">
+                    No drafts yet. Start writing and your scripts will appear here.
+                  </p>
+                </div>
+              ) : (
+                <ul className="mt-4 border-t border-zinc-300">
+                  {recentScripts.map((script: Script, index) => (
+                    <li key={script.id} className="border-b border-zinc-200 py-4">
+                      <div className="grid gap-3 sm:grid-cols-[42px_minmax(0,1fr)_auto] sm:items-start">
+                        <p className="text-[9px] font-medium uppercase tracking-[0.24em] text-zinc-500">
+                          {String(index + 1).padStart(2, "0")}
+                        </p>
+
+                        <button
+                          onClick={() => navigate(`/script/${script.id}`)}
+                          className="text-left"
+                        >
+                          <p className="line-clamp-1 text-[15px] font-medium text-zinc-900">
+                            {script.title || "Untitled Script"}
+                          </p>
+                          <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-zinc-500">
+                            Updated {formatUpdatedAt(script.updated_at)}
+                          </p>
+                        </button>
+
+                        <div className="flex items-center gap-4 sm:pt-0.5">
+                          <button
+                            onClick={() => startRename(script)}
+                            className="text-[9px] font-medium uppercase tracking-[0.2em] text-zinc-500 transition hover:text-zinc-900"
+                          >
+                            Rename
+                          </button>
+                          <button
+                            onClick={() => deleteScript(script.id)}
+                            className="text-[9px] font-medium uppercase tracking-[0.2em] text-red-500 transition hover:text-red-600"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
-            <div className="rounded-lg border border-orange-100 bg-white px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">Scenes</p>
-              <p className="mt-1 text-sm font-semibold text-zinc-900">{writingSnapshot.scenes}</p>
-            </div>
-            <div className="rounded-lg border border-orange-100 bg-white px-3 py-2">
-              <p className="text-[10px] uppercase tracking-[0.12em] text-zinc-500">Words</p>
-              <p className="mt-1 text-sm font-semibold text-zinc-900">{writingSnapshot.words}</p>
+          </section>
+        </div>
+
+        <button
+          type="button"
+          aria-label="easter egg"
+          onMouseEnter={() => setIsEasterEggActive(true)}
+          onMouseLeave={() => setIsEasterEggActive(false)}
+          className="absolute bottom-2 left-1/2 inline-flex w-fit -translate-x-1/2 p-0 text-[8px] lowercase leading-none text-zinc-400/30"
+        >
+          fuck you
+        </button>
+      </div>
+
+      {isEasterEggActive && (
+        <div className="pointer-events-none fixed inset-0 z-[80] flex items-center justify-center">
+          <p className="select-none text-center text-[24vw] font-semibold lowercase leading-[0.82] tracking-[0.08em] text-black">
+            fuck you!
+          </p>
+        </div>
+      )}
+
+      {aboutOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-start justify-center bg-black/25 px-4 pt-16 sm:px-6 sm:pt-20"
+          onClick={() => setAboutOpen(false)}
+        >
+          <div
+            className="w-full max-w-xl border border-zinc-300 bg-[#fbf8f2] p-6 sm:p-8"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="whitespace-pre-line text-[13px] leading-7 lowercase text-zinc-700">
+              {"hey, i'm radu.\n\ni made this because i'm not paying $200 for Final Draft, and apparently coding is kinda fun.\n\ni've spent the last year building PageOne between work, work, and work. i wanted a place to write screenplays without making it over complicated, expensive, or full of stuff i didn't ask for.\n\nso this is thing i came up with. a free(to you), still in progress, easy to use, easy to understand, (until i decide to add more features and completely break this thing) app made for writing first.\n\nenjoy!"}
+            </p>
+            <div className="mt-8 flex justify-end">
+              <button
+                onClick={() => setAboutOpen(false)}
+                className="text-[9px] font-medium lowercase tracking-[0.24em] text-zinc-500 transition hover:text-zinc-700"
+              >
+                close
+              </button>
             </div>
           </div>
-        </section>
-      </div>
+        </div>
+      )}
 
       {renamingScript && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 sm:px-6">
