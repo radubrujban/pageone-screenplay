@@ -9,7 +9,10 @@ const updateServiceWorker = registerSW({
   onNeedRefresh() {
     window.dispatchEvent(
       new CustomEvent('pageone:pwa-update-available', {
-        detail: { updateServiceWorker },
+        detail: {
+          updateServiceWorker,
+          detectedAt: Date.now(),
+        },
       }),
     )
   },
