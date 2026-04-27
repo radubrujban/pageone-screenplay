@@ -19,7 +19,11 @@ import {
   detectType,
   getNextType,
   getPreviousType,
+  predictNextType,
   revisionBackground,
+  sceneHeadingSuggestions,
+  shotSuggestions,
+  transitionSuggestions,
 } from "../lib/screenplayFormat";
 import type {
   ExportSettings,
@@ -51,6 +55,16 @@ const VISUAL_PAGE_CONTENT_WIDTH_PX =
   VISUAL_PAGE_MAX_WIDTH_PX -
   VISUAL_PAGE_PADDING_LEFT_PX -
   VISUAL_PAGE_PADDING_RIGHT_PX;
+
+type BlockSuggestionKind = "scene_heading" | "transition" | "shot";
+
+type BlockSuggestionState = {
+  kind: BlockSuggestionKind;
+  options: string[];
+};
+
+const TRANSITION_PREFIX_HINTS = ["CUT", "FADE", "DISS", "MATCH", "SMASH"];
+const SHOT_PREFIX_HINTS = ["CLOSE", "ANGLE", "POV", "INSERT", "WIDE", "TRACKING"];
 
 function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -109,6 +123,48 @@ function blockTypeLabel(type: ScriptBlock["type"]) {
   if (type === "transition") return "transition";
   if (type === "shot") return "shot";
   return type;
+}
+
+function getBlockSuggestions(block: ScriptBlock): BlockSuggestionState | null {
+  const normalizedType = block.type === "scene" ? "scene_heading" : block.type;
+  const query = block.text.trim().toUpperCase();
+
+  if (normalizedType === "scene_heading") {
+    if (!query || query.includes(" ")) return null;
+    const options = sceneHeadingSuggestions
+      .filter((suggestion) => suggestion.startsWith(query))
+      .filter((suggestion) => suggestion !== query);
+    return options.length ? { kind: "scene_heading", options: [...options] } : null;
+  }
+
+  const transitionTriggered =
+    normalizedType === "transition" ||
+    TRANSITION_PREFIX_HINTS.some((prefix) => query.startsWith(prefix));
+  if (transitionTriggered) {
+    const options = transitionSuggestions
+      .filter((suggestion) => !query || suggestion.startsWith(query))
+      .filter((suggestion) => suggestion !== query);
+    return options.length ? { kind: "transition", options: [...options] } : null;
+  }
+
+  const shotTriggered =
+    normalizedType === "shot" ||
+    SHOT_PREFIX_HINTS.some((prefix) => query.startsWith(prefix));
+  if (shotTriggered) {
+    const options = shotSuggestions
+      .filter((suggestion) => !query || suggestion.startsWith(query))
+      .filter((suggestion) => suggestion !== query);
+    return options.length ? { kind: "shot", options: [...options] } : null;
+  }
+
+  return null;
+}
+
+function applySceneHeadingPrefix(text: string, suggestion: string) {
+  const remainder = text
+    .replace(/^\s*(INT\.\/EXT\.|EXT\.\/INT\.|INT\.|EXT\.)\s*/i, "")
+    .trim();
+  return remainder ? `${suggestion} ${remainder}` : `${suggestion} `;
 }
 
 export default function ScriptEditor() {
@@ -310,6 +366,41 @@ export default function ScriptEditor() {
       )
     );
 
+    markUnsynced();
+  }
+
+  function applySuggestionToBlock(
+    id: string,
+    suggestion: string,
+    kind: BlockSuggestionKind
+  ) {
+    setBlocks(
+      blocks.map((block) => {
+        if (block.id !== id) return block;
+
+        if (kind === "scene_heading") {
+          return {
+            ...block,
+            type: "scene_heading",
+            text: applySceneHeadingPrefix(block.text, suggestion),
+          };
+        }
+
+        if (kind === "transition") {
+          return {
+            ...block,
+            type: "transition",
+            text: suggestion,
+          };
+        }
+
+        return {
+          ...block,
+          type: "shot",
+          text: suggestion,
+        };
+      })
+    );
     markUnsynced();
   }
 
@@ -615,9 +706,20 @@ export default function ScriptEditor() {
     }
 
     if (e.key === "Enter") {
+      const suggestions = getBlockSuggestions(current);
+      if (suggestions && suggestions.options.length > 0 && current.text.trim()) {
+        e.preventDefault();
+        applySuggestionToBlock(
+          current.id,
+          suggestions.options[0],
+          suggestions.kind
+        );
+        return;
+      }
+
       e.preventDefault();
 
-      const nextType = getNextType(current.type);
+      const nextType = predictNextType(current.type);
       const newBlock: ScriptBlock = {
         id: crypto.randomUUID(),
         type: nextType,
@@ -662,6 +764,7 @@ export default function ScriptEditor() {
     const isSceneHeading = isSceneHeadingType(block.type);
     const isCharacter = block.type === "character";
     const isAction = block.type === "action";
+    const isGeneral = block.type === "general";
     const isParenthetical = block.type === "parenthetical";
     const isDialogue = block.type === "dialogue";
     const isTransition = block.type === "transition";
@@ -694,7 +797,7 @@ export default function ScriptEditor() {
                 ? "0.02in"
                 : isDialogue
                   ? "0.01in"
-                  : isAction
+                  : isAction || isGeneral
                     ? "0.03in"
                     : "0in";
     const blockMarginBottom =
@@ -710,17 +813,20 @@ export default function ScriptEditor() {
                 ? "0.03in"
                 : isDialogue
                   ? "0.11in"
-                  : isAction
+                  : isAction || isGeneral
                     ? "0.05in"
                     : "0in";
     const blockTextAlign = isCharacter ? "center" : isTransition ? "right" : "left";
     const parentheticalOffsetPx = -12;
+    const suggestions = isActiveBlock ? getBlockSuggestions(block) : null;
 
     const textareaElement = (
-      <textarea
-        value={block.text}
-        disabled={block.locked}
-        ref={(textarea) => registerTextarea(block.id, textarea)}
+      <div className="relative">
+        <textarea
+          value={block.text}
+          disabled={block.locked}
+          spellCheck
+          ref={(textarea) => registerTextarea(block.id, textarea)}
         onFocus={() => setActiveBlockId(block.id)}
         onChange={(e) => {
           resizeTextarea(e.currentTarget);
@@ -769,6 +875,24 @@ export default function ScriptEditor() {
                   : block.type.toUpperCase()
         }
       />
+        {suggestions && suggestions.options.length > 0 && (
+          <div className="absolute left-0 top-full z-30 mt-1 w-52 rounded-md border border-zinc-200 bg-white p-1 shadow-lg">
+            {suggestions.options.map((suggestion) => (
+              <button
+                key={`${block.id}-${suggestion}`}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() =>
+                  applySuggestionToBlock(block.id, suggestion, suggestions.kind)
+                }
+                className="block w-full rounded px-2 py-1.5 text-left text-xs text-zinc-700 hover:bg-zinc-100"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
     );
 
     return (
@@ -900,6 +1024,7 @@ export default function ScriptEditor() {
               <DropdownItem label="Character" helper="Speaker cue" onClick={() => insertBlock("character")} />
               <DropdownItem label="Parenthetical" helper="Performance direction" onClick={() => insertBlock("parenthetical")} />
               <DropdownItem label="Dialogue" helper="Spoken line" onClick={() => insertBlock("dialogue")} />
+              <DropdownItem label="General" helper="Plain text fallback block" onClick={() => insertBlock("general")} />
               <Divider />
               <DropdownItem label="Transition" helper="Adds CUT TO:" onClick={() => insertBlock("transition", "CUT TO:")} />
               <DropdownItem label="Shot" helper="Adds ANGLE ON:" onClick={() => insertBlock("shot", "ANGLE ON:")} />

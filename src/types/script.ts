@@ -1,4 +1,13 @@
-export type BlockType = "scene" | "action" | "character" | "dialogue";
+export type BlockType =
+  | "scene_heading"
+  | "action"
+  | "character"
+  | "parenthetical"
+  | "dialogue"
+  | "transition"
+  | "shot"
+  | "general"
+  | "scene"; // legacy alias for older cached/remote scripts
 
 export type RevisionColor =
   | "none"

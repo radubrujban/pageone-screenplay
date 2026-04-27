@@ -57,10 +57,14 @@ export const defaultFormat: FormatSettings = {
 };
 
 export const blockTypes: ScriptBlock["type"][] = [
-  "scene",
+  "scene_heading",
   "action",
   "character",
+  "parenthetical",
   "dialogue",
+  "transition",
+  "shot",
+  "general",
 ];
 
 export const revisionColors: RevisionColor[] = [
@@ -72,33 +76,99 @@ export const revisionColors: RevisionColor[] = [
   "orange",
 ];
 
+function isSceneHeadingType(type: ScriptBlock["type"]) {
+  return type === "scene_heading" || type === "scene";
+}
+
+function normalizeBlockType(type: ScriptBlock["type"]): ScriptBlock["type"] {
+  return type === "scene" ? "scene_heading" : type;
+}
+
+export const sceneHeadingSuggestions = [
+  "INT.",
+  "EXT.",
+  "INT./EXT.",
+  "EXT./INT.",
+] as const;
+
+export const transitionSuggestions = [
+  "CUT TO:",
+  "FADE IN:",
+  "FADE OUT.",
+  "DISSOLVE TO:",
+  "MATCH CUT TO:",
+  "SMASH CUT TO:",
+] as const;
+
+export const shotSuggestions = [
+  "CLOSE ON:",
+  "ANGLE ON:",
+  "POV:",
+  "INSERT:",
+  "WIDE SHOT:",
+  "TRACKING SHOT:",
+] as const;
+
 export function detectType(text: string, currentType: ScriptBlock["type"]) {
   const trimmed = text.trim();
+  const upper = trimmed.toUpperCase();
 
-  if (trimmed.startsWith("INT.") || trimmed.startsWith("EXT.")) return "scene";
-  if (currentType !== "action") return currentType;
+  if (/^(INT\.|EXT\.|INT\.\/EXT\.|EXT\.\/INT\.)/.test(upper)) {
+    return "scene_heading";
+  }
+  if (
+    transitionSuggestions.some((suggestion) =>
+      upper.startsWith(suggestion.replace(/[.:]/g, ""))
+    )
+  ) {
+    return "transition";
+  }
+  if (shotSuggestions.some((suggestion) => upper.startsWith(suggestion.replace(":", "")))) {
+    return "shot";
+  }
+  if (/^[A-Z0-9 .'-]+ TO:$/.test(upper)) return "transition";
+  if (/^[A-Z0-9 .'-]+:$/.test(upper) && upper.length > 0) return "shot";
+  if (trimmed.startsWith("(") && trimmed.endsWith(")")) return "parenthetical";
+  if (currentType !== "action" && currentType !== "general") return currentType;
   if (/^[A-Z\s]{2,30}$/.test(trimmed) && trimmed.length > 0) return "character";
-  if (trimmed.startsWith("(")) return "dialogue";
 
   return "action";
 }
 
 export function getNextType(type: ScriptBlock["type"]): ScriptBlock["type"] {
-  if (type === "scene") return "action";
-  if (type === "action") return "character";
-  if (type === "character") return "dialogue";
-  return "action";
+  const normalizedType = normalizeBlockType(type);
+  const index = blockTypes.indexOf(normalizedType);
+  return blockTypes[(index + 1) % blockTypes.length];
 }
 
 export function getPreviousType(type: ScriptBlock["type"]): ScriptBlock["type"] {
-  const index = blockTypes.indexOf(type);
+  const normalizedType = normalizeBlockType(type);
+  const index = blockTypes.indexOf(normalizedType);
   return blockTypes[(index - 1 + blockTypes.length) % blockTypes.length];
 }
 
+export function predictNextType(type: ScriptBlock["type"]): ScriptBlock["type"] {
+  const normalizedType = normalizeBlockType(type);
+
+  if (normalizedType === "scene_heading") return "action";
+  if (normalizedType === "action") return "action";
+  if (normalizedType === "character") return "dialogue";
+  if (normalizedType === "parenthetical") return "dialogue";
+  if (normalizedType === "dialogue") return "action";
+  if (normalizedType === "transition") return "scene_heading";
+  if (normalizedType === "shot") return "action";
+  if (normalizedType === "general") return "action";
+  return "action";
+}
+
 export function blockToText(block: ScriptBlock) {
-  if (block.type === "scene") return block.text.toUpperCase();
+  if (isSceneHeadingType(block.type)) return block.text.toUpperCase();
   if (block.type === "character") return `\n${block.text.toUpperCase()}`;
+  if (block.type === "transition") return `> ${block.text.toUpperCase()}`;
+  if (block.type === "shot") return block.text.toUpperCase();
+  if (block.type === "parenthetical") return `      ${block.text}`;
   if (block.type === "dialogue") return `    ${block.text}`;
+  if (block.type === "general") return block.text;
   return block.text;
 }
 
@@ -181,12 +251,18 @@ export function buildRtf({
 
   const body = blocks
     .map((block) => {
-      if (block.type === "scene")
+      if (isSceneHeadingType(block.type))
         return `\\ql\\b ${escapeRtf(block.text.toUpperCase())}\\b0\\par`;
       if (block.type === "character")
         return `\\li3600\\b ${escapeRtf(block.text.toUpperCase())}\\b0\\par`;
+      if (block.type === "parenthetical")
+        return `\\li2520\\ri2520 ${escapeRtf(block.text)}\\par`;
       if (block.type === "dialogue")
         return `\\li1800\\ri1800 ${escapeRtf(block.text)}\\par`;
+      if (block.type === "transition")
+        return `\\qr\\b ${escapeRtf(block.text.toUpperCase())}\\b0\\par`;
+      if (block.type === "shot")
+        return `\\ql\\b ${escapeRtf(block.text.toUpperCase())}\\b0\\par`;
       return `\\ql ${escapeRtf(block.text)}\\par`;
     })
     .join("\\par");
@@ -227,13 +303,21 @@ export function buildFdx({
   const contentXml = blocks
     .map((block) => {
       const type =
-        block.type === "scene"
+        isSceneHeadingType(block.type)
           ? "Scene Heading"
           : block.type === "action"
             ? "Action"
             : block.type === "character"
               ? "Character"
-              : "Dialogue";
+              : block.type === "parenthetical"
+                ? "Parenthetical"
+                : block.type === "transition"
+                  ? "Transition"
+                  : block.type === "shot"
+                    ? "Shot"
+                    : block.type === "general"
+                      ? "Action"
+                    : "Dialogue";
 
       return `    <Paragraph Type="${type}"><Text>${escapeXml(
         block.text
@@ -293,11 +377,21 @@ export async function buildPdfBlob({
     y = top;
   }
 
-  function drawLine(text: string, x: number, bold = false) {
+  function drawLine(
+    text: string,
+    x: number,
+    bold = false,
+    align: "left" | "right" = "left",
+    maxWidth = contentMaxWidth
+  ) {
     if (y < bottom) addPage();
 
+    const value = text || " ";
+    const width = (bold ? courierBold : courier).widthOfTextAtSize(value, fontSize);
+    const drawX = align === "right" ? x + Math.max(0, maxWidth - width) : x;
+
     page.drawText(text || " ", {
-      x,
+      x: drawX,
       y,
       size: fontSize,
       font: bold ? courierBold : courier,
@@ -363,34 +457,66 @@ export async function buildPdfBlob({
   }
 
   for (const block of blocks) {
+    const isSceneHeading = isSceneHeadingType(block.type);
     const text =
-      block.type === "scene" || block.type === "character"
+      isSceneHeading ||
+      block.type === "character" ||
+      block.type === "transition" ||
+      block.type === "shot"
         ? block.text.toUpperCase()
         : block.text;
 
-    const bold = block.type === "scene" || block.type === "character";
+    const bold =
+      isSceneHeading ||
+      block.type === "character" ||
+      block.type === "transition" ||
+      block.type === "shot";
+    const dialogueWidth = format.dialogueWidth * 72;
+    const characterWidth = Math.max(140, dialogueWidth * 0.9);
+    const parentheticalWidth = Math.max(120, dialogueWidth * 0.72);
     const x =
       block.type === "character"
-        ? format.characterIndent * 72
+        ? left + (contentMaxWidth - characterWidth) / 2
         : block.type === "dialogue"
-          ? format.dialogueIndent * 72
-          : left;
+          ? left + (contentMaxWidth - dialogueWidth) / 2
+          : block.type === "parenthetical"
+            ? left + (contentMaxWidth - parentheticalWidth) / 2 + 12
+            : left;
 
     const maxWidth =
-      block.type === "dialogue" ? format.dialogueWidth * 72 : contentMaxWidth;
+      block.type === "character"
+        ? characterWidth
+        : block.type === "dialogue"
+          ? dialogueWidth
+          : block.type === "parenthetical"
+            ? parentheticalWidth
+            : contentMaxWidth;
 
     const approxChars = Math.max(10, Math.floor(maxWidth / (fontSize * 0.6)));
     const lines = wrapText(text || "", approxChars);
 
-    if (block.type === "scene" || block.type === "character") {
+    if (
+      isSceneHeading ||
+      block.type === "character" ||
+      block.type === "transition" ||
+      block.type === "shot"
+    ) {
       y -= lineGap * 0.5;
     }
 
     for (const line of lines.length ? lines : [""]) {
-      drawLine(line, x, bold);
+      drawLine(
+        line,
+        x,
+        bold,
+        block.type === "transition" ? "right" : "left",
+        maxWidth
+      );
     }
 
-    if (block.type === "dialogue") y -= lineGap * 0.4;
+    if (block.type === "dialogue" || block.type === "parenthetical") {
+      y -= lineGap * 0.4;
+    }
   }
 
   const bytes = await pdfDoc.save();

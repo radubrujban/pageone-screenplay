@@ -3,11 +3,8 @@ import {
   Download,
   FilePlus2,
   FileText,
-  LayoutGrid,
-  PanelsLeftRight,
   Save,
   Settings2,
-  Users,
 } from "lucide-react";
 import type { ComponentType } from "react";
 import SaveStatus from "./SaveStatus";
@@ -78,6 +75,9 @@ export default function ScriptToolbar({
   onPrint,
   onOpenFormatSettings,
 }: ScriptToolbarProps) {
+  const selectedElementType =
+    activeElementType === "scene" ? "scene_heading" : activeElementType;
+
   return (
     <div className="border-b border-zinc-300 bg-zinc-100/95 backdrop-blur">
       <div
@@ -111,22 +111,34 @@ export default function ScriptToolbar({
           />
           <select
             title="Element Type"
-            value={activeElementType}
+            value={selectedElementType}
             onChange={(event) =>
               onChangeElementType(event.target.value as ScriptBlock["type"])
             }
-            className="h-8 w-32 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-800"
+            className="h-8 w-40 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-800"
           >
-            <option value="scene">Scene</option>
+            <option value="scene_heading">Scene Heading</option>
             <option value="action">Action</option>
             <option value="character">Character</option>
+            <option value="parenthetical">Parenthetical</option>
             <option value="dialogue">Dialogue</option>
+            <option value="transition">Transition</option>
+            <option value="shot">Shot</option>
+            <option value="general">General</option>
           </select>
           <ToolbarButton
             label="Format"
             icon={Settings2}
             onClick={onOpenFormatSettings}
           />
+          <button
+            type="button"
+            disabled
+            title="Rich text tools coming soon."
+            className="inline-flex h-8 items-center rounded-md border border-zinc-200 bg-zinc-100 px-2.5 text-xs font-medium text-zinc-400"
+          >
+            Writing Tools
+          </button>
         </div>
 
         <div className="flex min-w-fit flex-1 items-center justify-end gap-1.5">
@@ -139,27 +151,6 @@ export default function ScriptToolbar({
             label="Print"
             icon={Download}
             onClick={onPrint}
-          />
-          <ToolbarButton
-            label="Collaboration"
-            icon={Users}
-            onClick={() => undefined}
-            disabled
-            titleOverride="Collaboration (Coming soon)"
-          />
-          <ToolbarButton
-            label="Split"
-            icon={PanelsLeftRight}
-            onClick={() => undefined}
-            disabled
-            titleOverride="Split (Coming soon)"
-          />
-          <ToolbarButton
-            label="Beat Board"
-            icon={LayoutGrid}
-            onClick={() => undefined}
-            disabled
-            titleOverride="Beat Board (Coming soon)"
           />
           <div className="rounded border border-zinc-200 bg-white px-2 py-1">
             <SaveStatus />
