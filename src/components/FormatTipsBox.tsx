@@ -72,15 +72,15 @@ export default function FormatTipsBox({
   const tip = TIP_CONTENT[normalizeType(activeType)];
 
   return (
-    <aside className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+    <aside className="rounded-md border border-zinc-200/90 bg-zinc-50/90 p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur-sm">
       <div className="flex items-start justify-between gap-2">
-        <span className="rounded border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
+        <span className="rounded border border-zinc-200 bg-white/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
           Tip
         </span>
         <button
           type="button"
           onClick={onClose}
-          className="text-xs font-medium text-zinc-500 hover:text-zinc-800"
+          className="rounded px-1.5 py-0.5 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-50"
         >
           Close
         </button>
@@ -89,7 +89,7 @@ export default function FormatTipsBox({
       <h3 className="mt-3 text-sm font-semibold text-zinc-900">{tip.title}</h3>
       <p className="mt-1 text-sm leading-6 text-zinc-600">{tip.description}</p>
 
-      <div className="mt-3 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+      <div className="mt-3 rounded-md border border-zinc-200/90 bg-white/85 p-3">
         <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
           Example
         </p>

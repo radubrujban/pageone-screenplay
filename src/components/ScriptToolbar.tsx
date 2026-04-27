@@ -50,10 +50,10 @@ function ToolbarButton({
         if (disabled) return;
         onClick();
       }}
-      className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition ${
+      className={`inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-50 ${
         active
-          ? "border-blue-300 bg-blue-50 text-blue-900"
-          : "border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-100"
+          ? "border-zinc-300 bg-zinc-100 text-zinc-800"
+          : "border-zinc-300 bg-white/95 text-zinc-700 hover:bg-zinc-100/80"
       } disabled:cursor-not-allowed disabled:border-zinc-200 disabled:bg-zinc-100 disabled:text-zinc-400`}
     >
       <Icon className="h-3.5 w-3.5" />
@@ -77,9 +77,9 @@ export default function ScriptToolbar({
     activeElementType === "scene" ? "scene_heading" : activeElementType;
 
   return (
-    <div className="border-b border-zinc-200 bg-zinc-50/95 backdrop-blur">
+    <div className="border-b border-zinc-200/90 bg-zinc-50/95 backdrop-blur-sm">
       <div
-        className="mx-auto grid min-h-[56px] w-full max-w-[1600px] grid-cols-1 items-center gap-2 px-3 py-2 sm:px-4 lg:grid-cols-[1fr_auto_1fr] lg:gap-3"
+        className="mx-auto grid min-h-[58px] w-full max-w-[1600px] grid-cols-1 items-center gap-2 px-3 py-2.5 sm:px-4 lg:grid-cols-[1fr_auto_1fr] lg:gap-3"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex min-w-0 items-center gap-2">
@@ -107,7 +107,7 @@ export default function ScriptToolbar({
             onChange={(event) =>
               onChangeElementType(event.target.value as ScriptBlock["type"])
             }
-            className="h-8 w-40 rounded-md border border-zinc-300 bg-white px-2 text-xs text-zinc-800"
+            className="h-8 w-40 rounded-md border border-zinc-300 bg-white/95 px-2 text-xs text-zinc-800 outline-none transition-colors focus-visible:border-zinc-400 focus-visible:ring-2 focus-visible:ring-zinc-400/60 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-50"
           >
             <option value="scene_heading">Scene Heading</option>
             <option value="action">Action</option>
@@ -126,7 +126,7 @@ export default function ScriptToolbar({
           />
         </div>
 
-        <div className="flex min-w-0 items-center justify-start gap-1.5 lg:justify-end">
+        <div className="flex min-w-0 items-center justify-start gap-2 lg:justify-end">
           <ToolbarButton
             label="Export"
             icon={Download}
@@ -137,7 +137,7 @@ export default function ScriptToolbar({
             icon={Printer}
             onClick={onPrint}
           />
-          <SaveStatus className="ml-1 whitespace-nowrap" />
+          <SaveStatus className="ml-1 whitespace-nowrap text-[11px]" />
         </div>
       </div>
     </div>

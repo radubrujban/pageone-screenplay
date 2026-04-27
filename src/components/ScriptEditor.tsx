@@ -86,23 +86,23 @@ function elementBackground(
   isActive: boolean
 ): string {
   if (type === "scene_heading" || type === "scene") {
-    return isActive ? "#f8fbff" : "#fbfdff";
+    return isActive ? "#f7f4ee" : "#fbfaf7";
   }
-  if (type === "dialogue") return isActive ? "#fafafa" : "#fdfdfd";
-  if (type === "parenthetical") return isActive ? "#fbfbfd" : "#fefeff";
-  if (type === "transition") return isActive ? "#f8fafc" : "#fbfdff";
-  if (type === "shot") return isActive ? "#fafafa" : "#fdfdfd";
-  if (type === "character") return isActive ? "#fbfbfb" : "transparent";
-  return isActive ? "#fcfcfc" : "transparent";
+  if (type === "dialogue") return isActive ? "#f8f6f2" : "#fdfcf9";
+  if (type === "parenthetical") return isActive ? "#f7f5f1" : "#fdfcfb";
+  if (type === "transition") return isActive ? "#f6f4ef" : "#fbfaf7";
+  if (type === "shot") return isActive ? "#f8f6f2" : "#fdfcf9";
+  if (type === "character") return isActive ? "#f7f5f1" : "transparent";
+  return isActive ? "#f8f6f2" : "transparent";
 }
 
 function elementAccent(type: ScriptBlock["type"]) {
-  if (type === "scene_heading" || type === "scene") return "#bfdbfe";
-  if (type === "dialogue") return "#e5e7eb";
-  if (type === "parenthetical") return "#e4e4e7";
-  if (type === "transition") return "#cbd5e1";
-  if (type === "shot") return "#d4d4d8";
-  if (type === "character") return "#d4d4d8";
+  if (type === "scene_heading" || type === "scene") return "#d6d1c8";
+  if (type === "dialogue") return "#ddd8cf";
+  if (type === "parenthetical") return "#d9d4cb";
+  if (type === "transition") return "#d3cec4";
+  if (type === "shot") return "#d8d3ca";
+  if (type === "character") return "#d8d3ca";
   return "transparent";
 }
 
@@ -917,7 +917,7 @@ export default function ScriptEditor() {
         }}
         onKeyDown={(e) => handleKeyDown(e, index)}
         rows={1}
-        className="resize-none overflow-hidden rounded-sm bg-transparent outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-80"
+        className="resize-none overflow-hidden rounded-sm bg-transparent outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-zinc-400/60 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-80"
         style={{
           width: blockWidth,
           marginTop: blockMarginTop,
@@ -959,7 +959,7 @@ export default function ScriptEditor() {
         }
       />
         {suggestions && suggestions.options.length > 0 && (
-          <div className="absolute left-0 top-full z-30 mt-1 w-52 rounded-md border border-zinc-200 bg-white p-1 shadow-lg">
+          <div className="absolute left-0 top-full z-30 mt-1.5 w-56 rounded-md border border-zinc-200/90 bg-white/95 p-1.5 shadow-[0_8px_20px_rgba(15,23,42,0.08)] backdrop-blur-sm">
             {suggestions.options.map((suggestion, suggestionIndex) => (
               <button
                 key={`${block.id}-${suggestion}`}
@@ -974,10 +974,10 @@ export default function ScriptEditor() {
                 onClick={() =>
                   applySuggestionToBlock(block.id, suggestion, suggestions.kind)
                 }
-                className={`block w-full rounded px-2 py-1.5 text-left text-xs text-zinc-700 ${
+                className={`block w-full rounded-sm px-2.5 py-1.5 text-left text-xs text-zinc-700 transition-colors ${
                   suggestionIndex === highlightedIndex
-                    ? "bg-zinc-100"
-                    : "hover:bg-zinc-100"
+                    ? "bg-zinc-100 text-zinc-900"
+                    : "hover:bg-zinc-50"
                 }`}
               >
                 {suggestion}
@@ -992,7 +992,9 @@ export default function ScriptEditor() {
       <div
         id={`block-${block.id}`}
         key={block.id}
-        className={`group relative rounded-sm ${isActiveBlock ? "bg-blue-50/20" : ""}`}
+        className={`group relative rounded-sm transition-colors ${
+          isActiveBlock ? "bg-zinc-100/55" : ""
+        }`}
       >
         {block.type !== "action" && (
           <span
@@ -1006,7 +1008,7 @@ export default function ScriptEditor() {
 
         {isActiveBlock && (
           <span
-            className="absolute bottom-1 top-1 w-1 rounded-full bg-blue-500/70"
+            className="absolute bottom-1 top-1 w-[3px] rounded-full bg-zinc-400/55"
             style={{ left: "-0.28in" }}
           />
         )}
@@ -1063,9 +1065,9 @@ export default function ScriptEditor() {
   return (
     <AppLayout contentClassName="px-0 py-0 sm:px-0 sm:py-0">
       <div
-        className="min-h-[calc(100vh-56px)] bg-zinc-100 text-zinc-950 font-sans"
+        className="min-h-[calc(100vh-56px)] bg-[radial-gradient(130%_65%_at_50%_0%,#f7f4ee_0%,#f1eee8_58%,#ebe7e0_100%)] text-zinc-950 font-sans"
       >
-      <header className="sticky top-0 z-30 border-b border-zinc-200 bg-zinc-50/95 font-sans shadow-sm backdrop-blur">
+      <header className="sticky top-0 z-30 border-b border-zinc-200/90 bg-zinc-50/92 font-sans shadow-[0_1px_2px_rgba(15,23,42,0.06)] backdrop-blur-sm">
         <ScriptToolbar
           activeElementType={activeBlock?.type || "action"}
           onChangeElementType={(type) => {
@@ -1085,13 +1087,13 @@ export default function ScriptEditor() {
         />
       </header>
 
-      <section className="border-b border-zinc-200 bg-zinc-50 px-4 py-4 text-center">
+      <section className="border-b border-zinc-200/90 bg-zinc-50/85 px-4 py-5 text-center">
         <div className="relative mx-auto flex w-full max-w-[960px] items-center justify-center">
           <div>
-            <p className="mx-auto max-w-[900px] truncate text-sm font-semibold tracking-[0.08em] text-zinc-800">
+            <p className="mx-auto max-w-[900px] truncate text-sm font-semibold tracking-[0.1em] text-zinc-700">
               {(title || "Untitled Script").toUpperCase()}
             </p>
-            <p className="mt-1 text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+            <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-zinc-500">
               PageOne Script
             </p>
           </div>
@@ -1099,7 +1101,7 @@ export default function ScriptEditor() {
           <button
             type="button"
             onClick={() => setShowTitlePage((value) => !value)}
-            className="absolute right-4 rounded border border-zinc-200 bg-white px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-600 transition hover:bg-zinc-100 sm:right-6"
+            className="absolute right-4 rounded border border-zinc-200/90 bg-white/95 px-2 py-1 text-[10px] font-medium uppercase tracking-[0.12em] text-zinc-600 transition-colors hover:bg-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-400/70 focus-visible:ring-offset-1 focus-visible:ring-offset-zinc-50 sm:right-6"
           >
             {showTitlePage ? "Hide Title Page" : "Title Page"}
           </button>
@@ -1107,12 +1109,12 @@ export default function ScriptEditor() {
       </section>
 
       <div className="font-sans">
-        <main className="min-h-[calc(100vh-206px)] overflow-x-hidden overflow-y-auto px-3 py-4 font-sans sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+        <main className="min-h-[calc(100vh-206px)] overflow-x-hidden overflow-y-auto px-3 py-5 font-sans sm:px-6 sm:py-7 lg:px-8 lg:py-9">
           <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-6 lg:flex-row lg:items-start lg:justify-center">
-            <div className="flex min-w-0 flex-1 flex-col items-center gap-8">
+            <div className="flex min-w-0 flex-1 flex-col items-center gap-10">
               {showTitlePage && (
                 <section
-                  className="w-full border border-zinc-300 bg-white text-black shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
+                  className="w-full border border-zinc-300/90 bg-white text-black shadow-[0_1px_4px_rgba(15,23,42,0.05)]"
                   style={{
                     width: `min(${VISUAL_PAGE_MAX_WIDTH_PX}px, calc(100vw - 2.5rem))`,
                     minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
@@ -1201,7 +1203,7 @@ export default function ScriptEditor() {
               {visualPageBlockIndices.map((pageIndices, pageIndex) => (
                 <section
                   key={`visual-page-${pageIndex}`}
-                  className="w-full border border-zinc-300 bg-white text-black shadow-[0_2px_8px_rgba(15,23,42,0.06)]"
+                  className="w-full border border-zinc-300/90 bg-white text-black shadow-[0_1px_4px_rgba(15,23,42,0.05)]"
                   style={{
                     width: `min(${VISUAL_PAGE_MAX_WIDTH_PX}px, calc(100vw - 2.5rem))`,
                     minHeight: `${VISUAL_PAGE_MIN_HEIGHT_PX}px`,
