@@ -78,17 +78,37 @@ function elementBackground(
   type: ScriptBlock["type"],
   isActive: boolean
 ): string {
-  if (type === "scene") return isActive ? "#f8fbff" : "#fbfdff";
+  if (type === "scene_heading" || type === "scene") {
+    return isActive ? "#f8fbff" : "#fbfdff";
+  }
   if (type === "dialogue") return isActive ? "#fafafa" : "#fdfdfd";
+  if (type === "parenthetical") return isActive ? "#fbfbfd" : "#fefeff";
+  if (type === "transition") return isActive ? "#f8fafc" : "#fbfdff";
+  if (type === "shot") return isActive ? "#fafafa" : "#fdfdfd";
   if (type === "character") return isActive ? "#fbfbfb" : "transparent";
   return isActive ? "#fcfcfc" : "transparent";
 }
 
 function elementAccent(type: ScriptBlock["type"]) {
-  if (type === "scene") return "#bfdbfe";
+  if (type === "scene_heading" || type === "scene") return "#bfdbfe";
   if (type === "dialogue") return "#e5e7eb";
+  if (type === "parenthetical") return "#e4e4e7";
+  if (type === "transition") return "#cbd5e1";
+  if (type === "shot") return "#d4d4d8";
   if (type === "character") return "#d4d4d8";
   return "transparent";
+}
+
+function isSceneHeadingType(type: ScriptBlock["type"]) {
+  return type === "scene_heading" || type === "scene";
+}
+
+function blockTypeLabel(type: ScriptBlock["type"]) {
+  if (isSceneHeadingType(type)) return "scene heading";
+  if (type === "parenthetical") return "parenthetical";
+  if (type === "transition") return "transition";
+  if (type === "shot") return "shot";
+  return type;
 }
 
 export default function ScriptEditor() {
@@ -143,7 +163,7 @@ export default function ScriptEditor() {
   const scenes = useMemo(
     () =>
       blocks.filter(
-        (block) => block.type === "scene" && block.text.trim().length > 0
+        (block) => isSceneHeadingType(block.type) && block.text.trim().length > 0
       ),
     [blocks]
   );
@@ -330,10 +350,21 @@ export default function ScriptEditor() {
   }
 
   function insertBlock(type: ScriptBlock["type"], starterText = "") {
+    const defaultText =
+      type === "scene_heading" || type === "scene"
+        ? "INT. LOCATION - DAY"
+        : type === "transition"
+          ? "CUT TO:"
+          : type === "shot"
+            ? "ANGLE ON:"
+            : type === "parenthetical"
+              ? "(beat)"
+              : "";
+
     const newBlock: ScriptBlock = {
       id: crypto.randomUUID(),
       type,
-      text: starterText || (type === "scene" ? "INT. LOCATION - DAY" : ""),
+      text: starterText || defaultText,
       revisionColor: revisionMode ? currentRevisionColor : "none",
       locked: false,
       note: "",
@@ -520,7 +551,12 @@ export default function ScriptEditor() {
   function formatCleanup() {
     setBlocks(
       blocks.map((block) => {
-        if (block.type === "scene" || block.type === "character") {
+        if (
+          isSceneHeadingType(block.type) ||
+          block.type === "character" ||
+          block.type === "transition" ||
+          block.type === "shot"
+        ) {
           return { ...block, text: block.text.toUpperCase() };
         }
 
@@ -623,6 +659,96 @@ export default function ScriptEditor() {
       revisionMode &&
       block.revisionColor !== undefined &&
       block.revisionColor !== "none";
+    const isSceneHeading = isSceneHeadingType(block.type);
+    const isCharacter = block.type === "character";
+    const isAction = block.type === "action";
+    const isParenthetical = block.type === "parenthetical";
+    const isDialogue = block.type === "dialogue";
+    const isTransition = block.type === "transition";
+    const isShot = block.type === "shot";
+    const isUppercase =
+      isSceneHeading || isCharacter || isTransition || isShot;
+    const usesCenteredColumn = isCharacter || isParenthetical || isDialogue;
+    const dialogueColumnWidthPx = 336;
+    const characterWidthPx = 300;
+    const parentheticalWidthPx = 250;
+
+    const blockWidth = isCharacter
+      ? `${characterWidthPx}px`
+      : isParenthetical
+        ? `${parentheticalWidthPx}px`
+        : isDialogue
+          ? `${dialogueColumnWidthPx}px`
+          : "100%";
+
+    const blockMarginTop = isSceneHeading
+      ? "0.25in"
+      : isCharacter
+        ? "0.22in"
+        : isTransition || isShot
+          ? "0.2in"
+          : isAction
+            ? "0.04in"
+            : "0in";
+    const blockMarginBottom =
+      isDialogue || isParenthetical ? "0.12in" : isAction ? "0.04in" : "0in";
+    const blockTextAlign = isCharacter ? "center" : isTransition ? "right" : "left";
+    const parentheticalOffsetPx = -12;
+
+    const textareaElement = (
+      <textarea
+        value={block.text}
+        disabled={block.locked}
+        ref={(textarea) => registerTextarea(block.id, textarea)}
+        onFocus={() => setActiveBlockId(block.id)}
+        onChange={(e) => {
+          resizeTextarea(e.currentTarget);
+          updateBlock(block.id, e.target.value);
+        }}
+        onKeyDown={(e) => handleKeyDown(e, index)}
+        rows={1}
+        className="resize-none overflow-hidden rounded-sm bg-transparent outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-80"
+        style={{
+          width: blockWidth,
+          marginTop: blockMarginTop,
+          marginBottom: blockMarginBottom,
+          marginLeft: usesCenteredColumn
+            ? isCharacter
+              ? "auto"
+              : isParenthetical
+              ? `${parentheticalOffsetPx}px`
+              : "0px"
+            : "0px",
+          marginRight: usesCenteredColumn
+            ? isCharacter || isParenthetical
+              ? "auto"
+              : "0px"
+            : "0px",
+          paddingLeft: isParenthetical ? "0.1in" : "0in",
+          fontWeight: isUppercase ? 700 : 400,
+          fontStyle: isParenthetical ? "italic" : "normal",
+          textAlign: blockTextAlign,
+          textTransform: isUppercase ? "uppercase" : "none",
+          fontFamily: '"Courier Prime", Courier, monospace',
+          fontSize: `${format.fontSize}pt`,
+          lineHeight: format.lineHeight,
+          background: showRevisionBackground
+            ? revisionBackground(block.revisionColor)
+            : elementBackground(block.type, isActiveBlock),
+        }}
+        placeholder={
+          isSceneHeading
+            ? "SCENE HEADING"
+            : block.type === "parenthetical"
+              ? "(parenthetical)"
+              : block.type === "transition"
+                ? "CUT TO:"
+                : block.type === "shot"
+                  ? "ANGLE ON:"
+                  : block.type.toUpperCase()
+        }
+      />
+    );
 
     return (
       <div
@@ -647,7 +773,7 @@ export default function ScriptEditor() {
           />
         )}
 
-        {block.type === "scene" && format.showSceneNumbers && sceneIndex >= 0 && (
+        {isSceneHeading && format.showSceneNumbers && sceneIndex >= 0 && (
           <>
             <span className="absolute top-0 text-xs text-zinc-500" style={{ left: "-0.55in" }}>
               {sceneIndex + 1}.
@@ -662,7 +788,7 @@ export default function ScriptEditor() {
           className="absolute top-1 hidden rounded bg-zinc-100 px-2 py-1 text-[10px] uppercase tracking-wider text-zinc-500 group-hover:block"
           style={{ left: "-0.95in" }}
         >
-          {block.type}
+          {blockTypeLabel(block.type)}
         </span>
 
         {block.note && (
@@ -682,47 +808,16 @@ export default function ScriptEditor() {
             locked
           </span>
         )}
-
-        <textarea
-          value={block.text}
-          disabled={block.locked}
-          ref={(textarea) => registerTextarea(block.id, textarea)}
-          onFocus={() => setActiveBlockId(block.id)}
-          onChange={(e) => {
-            resizeTextarea(e.currentTarget);
-            updateBlock(block.id, e.target.value);
-          }}
-          onKeyDown={(e) => handleKeyDown(e, index)}
-          rows={1}
-          className="resize-none overflow-hidden rounded-sm bg-transparent outline-none transition-colors disabled:cursor-not-allowed disabled:opacity-80"
-          style={{
-            width: block.type === "dialogue" ? `${format.dialogueWidth}in` : "100%",
-            marginLeft:
-              block.type === "character"
-                ? `${format.characterIndent - format.leftMargin}in`
-                : block.type === "dialogue"
-                ? `${format.dialogueIndent - format.leftMargin}in`
-                : "0in",
-            marginTop:
-              block.type === "scene"
-                ? "0.25in"
-                : block.type === "character"
-                ? "0.22in"
-                : "0in",
-            marginBottom: block.type === "dialogue" ? "0.12in" : "0in",
-            fontWeight:
-              block.type === "scene" || block.type === "character" ? 700 : 400,
-            textTransform:
-              block.type === "scene" || block.type === "character" ? "uppercase" : "none",
-            fontFamily: '"Courier Prime", Courier, monospace',
-            fontSize: `${format.fontSize}pt`,
-            lineHeight: format.lineHeight,
-            background: showRevisionBackground
-              ? revisionBackground(block.revisionColor)
-              : elementBackground(block.type, isActiveBlock),
-          }}
-          placeholder={block.type === "scene" ? "SCENE HEADING" : block.type.toUpperCase()}
-        />
+        {usesCenteredColumn ? (
+          <div
+            className="mx-auto"
+            style={{ width: `${dialogueColumnWidthPx}px` }}
+          >
+            {textareaElement}
+          </div>
+        ) : (
+          textareaElement
+        )}
       </div>
     );
   }
@@ -779,13 +874,14 @@ export default function ScriptEditor() {
 
           {activeMenu === "insert" && (
             <Dropdown left={212}>
-              <DropdownItem label="Scene Heading" helper="INT./EXT. slugline" onClick={() => insertBlock("scene")} />
+              <DropdownItem label="Scene Heading" helper="INT./EXT. slugline" onClick={() => insertBlock("scene_heading")} />
               <DropdownItem label="Action" helper="Description text" onClick={() => insertBlock("action")} />
               <DropdownItem label="Character" helper="Speaker cue" onClick={() => insertBlock("character")} />
+              <DropdownItem label="Parenthetical" helper="Performance direction" onClick={() => insertBlock("parenthetical")} />
               <DropdownItem label="Dialogue" helper="Spoken line" onClick={() => insertBlock("dialogue")} />
               <Divider />
-              <DropdownItem label="Transition" helper="Adds CUT TO:" onClick={() => insertBlock("action", "CUT TO:")} />
-              <DropdownItem label="Shot" helper="Adds ANGLE ON:" onClick={() => insertBlock("action", "ANGLE ON:")} />
+              <DropdownItem label="Transition" helper="Adds CUT TO:" onClick={() => insertBlock("transition", "CUT TO:")} />
+              <DropdownItem label="Shot" helper="Adds ANGLE ON:" onClick={() => insertBlock("shot", "ANGLE ON:")} />
             </Dropdown>
           )}
 
