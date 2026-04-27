@@ -4,7 +4,16 @@ import { registerSW } from 'virtual:pwa-register'
 import './index.css'
 import App from './App.tsx'
 
-registerSW({ immediate: true })
+const updateServiceWorker = registerSW({
+  immediate: true,
+  onNeedRefresh() {
+    window.dispatchEvent(
+      new CustomEvent('pageone:pwa-update-available', {
+        detail: { updateServiceWorker },
+      }),
+    )
+  },
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
